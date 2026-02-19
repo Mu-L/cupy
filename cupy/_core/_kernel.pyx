@@ -28,6 +28,7 @@ from cupy._core.core cimport compile_with_cache
 from cupy._core.core cimport _ndarray_base
 from cupy._core cimport internal
 from cupy_backends.cuda.api cimport runtime
+from cupy_backends.cuda.api import driver as _driver
 
 try:
     from cupy_backends.cuda.libs import cutensor as cuda_cutensor
@@ -48,6 +49,25 @@ cdef inline bint _contains_zero(const shape_t& v) except? -1:
 def _get_warpsize():
     device_id = runtime.getDevice()
     return runtime.getDeviceProperties(device_id)['warpSize']
+
+
+# ROCm 7+ requires a 64-bit mask type for __shfl_*_sync / __any_sync.
+_is_hip_7_plus = (runtime._is_hip_environment
+                  and _driver.get_build_version() >= 7_00_00000)
+
+# Full-lane mask: value is warp-size-dependent on HIP, always 32-bit on CUDA.
+# On HIP the mask *type* must be 64-bit (ROCm 7+ enforces via static_assert),
+# so _full_mask_hex() appends 'ULL' to the C literal.
+if runtime._is_hip_environment:
+    _full_mask = (1 << _get_warpsize()) - 1
+else:
+    _full_mask = 0xffffffff
+
+
+def _full_mask_hex():
+    if runtime._is_hip_environment:
+        return hex(_full_mask) + 'ULL'
+    return hex(_full_mask)
 
 
 cdef str _get_simple_elementwise_kernel_code(
