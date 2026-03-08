@@ -482,13 +482,16 @@ class TestRotate:
                           self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(rtol=1e-5, atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-5},
+                                 atol=1e-5,
+                                 scipy_name='scp')
     def test_rotate_float(self, xp, scp, dtype):
         a = testing.shaped_random((10, 10), xp, dtype)
         return self._rotate(xp, scp, a)
 
     @testing.for_complex_dtypes()
-    @testing.numpy_cupy_allclose(rtol=1e-5, atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.complex64: 1e-5},
+                                 atol=1e-5, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_rotate_complex_float(self, xp, scp, dtype):
         if self.output == numpy.float64:
