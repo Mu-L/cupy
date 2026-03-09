@@ -252,7 +252,7 @@ def _generate_interp_custom(coord_func, ndim, large_int, yshape, mode, cval,
     """
 
     ops = []
-    float_type = 'float' if float_dtype == cupy.float32 else 'double'
+    float_type = cupy._core._scalar.get_typename(float_dtype)
     internal_dtype = float_type if integer_output else 'Y'
     ops.append(f'{internal_dtype} out = 0.0;')
 
