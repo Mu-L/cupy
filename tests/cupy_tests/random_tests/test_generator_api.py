@@ -292,10 +292,11 @@ class TestHypergeometric(
     pass
 
 
-class TestHypergeometricValidation(unittest.TestCase):
+class TestHypergeometricValidation:
 
-    def setUp(self):
-        self.gen = random.default_rng(seed=testing.generate_seed())
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.gen = random.default_rng(seed=0)
 
     def test_hypergeometric_ngood_negative(self):
         with pytest.raises(ValueError):

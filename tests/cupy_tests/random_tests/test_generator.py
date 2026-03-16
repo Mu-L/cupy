@@ -245,29 +245,30 @@ class TestHypergeometric(
     pass
 
 
-class TestHypergeometricValidation(unittest.TestCase):
+class TestHypergeometricValidation:
 
-    def setUp(self):
-        self.rs = _generator.RandomState(seed=testing.generate_seed())
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.rs = _generator.RandomState(seed=0)
 
     def test_hypergeometric_ngood_negative(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.rs.hypergeometric(-1, 10, 5, size=10)
 
     def test_hypergeometric_nbad_negative(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.rs.hypergeometric(10, -1, 5, size=10)
 
     def test_hypergeometric_nsample_zero(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.rs.hypergeometric(10, 10, 0, size=10)
 
     def test_hypergeometric_nsample_negative(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.rs.hypergeometric(10, 10, -1, size=10)
 
     def test_hypergeometric_nsample_too_large(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.rs.hypergeometric(5, 10, 16, size=10)
 
     def test_hypergeometric_nsample_equals_total(self):
