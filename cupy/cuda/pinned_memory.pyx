@@ -1,6 +1,7 @@
 # distutils: language = c++
 
 cimport cython
+cimport cpython
 
 import weakref
 
@@ -105,14 +106,15 @@ cdef class PinnedMemoryPointer:
         buffer.itemsize = 1
         buffer.len = size
         buffer.ndim = 1
-        buffer.obj = self
         buffer.readonly = 0
         buffer.shape = self._shape
         buffer.strides = self._strides
         buffer.suboffsets = NULL
+        cpython.Py_INCREF(self)
+        buffer.obj = self
 
     def __releasebuffer__(self, Py_buffer *buffer):
-        pass
+        cpython.Py_DECREF(self)
 
 
 cdef class _EventWatcher:
@@ -137,6 +139,8 @@ cdef class _EventWatcher:
             obj: The object to be held.
         """
         self.check_and_release()
+        if event.done:
+            return
         self.events.append((event, obj))  # atomic
 
     cpdef check_and_release(self):
@@ -255,13 +259,17 @@ cdef class PinnedMemoryPool:
     cdef:
         object _alloc
         dict _free
+        set _in_use
         object __weakref__
         object _weakref
         size_t _allocation_unit_size
+        # This lock only really protects the `.pop()` from failing
+        # (other operations are all atomic).
         cython.pymutex _lock
 
     def __init__(self, allocator=_malloc):
         self._free = {}
+        self._in_use = set()
         self._alloc = allocator
         self._weakref = weakref.ref(self)
         self._allocation_unit_size = 512
@@ -286,9 +294,10 @@ cdef class PinnedMemoryPool:
                 except runtime.CUDARuntimeError as e:
                     if e.status != runtime.errorMemoryAllocation:
                         raise
-                    self._free_all_blocks_lock_held()
+                    self.free_all_blocks()
                     mem = self._alloc(size).mem
 
+        self._in_use.add(mem)
         pmem = PooledPinnedMemory(mem, self._weakref)
         return PinnedMemoryPointer(pmem, 0)
 
@@ -296,29 +305,30 @@ cdef class PinnedMemoryPool:
         cdef list free = self._free.get(size)
         if free is None:
             free = self._free.setdefault(size, [])
-        # OK to append to list (atomic) while other threads may pop().
+        # OK to append to list (atomic) while another threads may pop().
         free.append(mem)
 
-    cdef _free_all_blocks_lock_held(self):
-        _watcher.check_and_release()
-        self._free.clear()
+        self._in_use.remove(mem)
 
     cpdef free_all_blocks(self):
         """Release free all blocks."""
         _watcher.check_and_release()
-        with self._lock:
-            self._free.clear()
+        self._free.clear()
 
     cpdef n_free_blocks(self):
         """Count the total number of free blocks.
+
+        This function is thread-safe but may not capture a consistent
+        state. It exists for debugging purposes and is slow.
 
         Returns:
             int: The total number of free blocks.
         """
         cdef Py_ssize_t n = 0
-        with self._lock:
-            for v in self._free.values():
-                n += len(v)
+        # Shallow copy to be sure the iterator is thread-safe; no lock needed,
+        # it's OK if lists are modified while iterating.
+        for v in self._free.copy().values():
+            n += len(v)
 
         return n
 
