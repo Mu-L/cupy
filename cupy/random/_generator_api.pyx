@@ -608,10 +608,6 @@ class Generator:
             raise ValueError('nbad < 0')
         if type(nsample) in (float, int) and nsample < 0:
             raise ValueError('nsample < 0')
-        if (type(ngood) in (float, int) and type(nbad) in (float, int)
-                and type(nsample) in (float, int)):
-            if ngood + nbad < nsample:
-                raise ValueError('ngood + nbad < nsample')
 
         if not isinstance(ngood, _ndarray_base):
             if type(ngood) in (float, int):

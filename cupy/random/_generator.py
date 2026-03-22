@@ -254,19 +254,12 @@ class RandomState:
         """  # NOQA
         # Array inputs are not validated here; the kernel dispatcher
         # handles out-of-range values safely.
-        if isinstance(ngood, (int, float)):
-            if ngood < 0:
-                raise ValueError('ngood < 0')
-        if isinstance(nbad, (int, float)):
-            if nbad < 0:
-                raise ValueError('nbad < 0')
-        if isinstance(nsample, (int, float)):
-            if nsample < 1:
-                raise ValueError('nsample < 1')
-        if (isinstance(ngood, (int, float)) and isinstance(nbad, (int, float))
-                and isinstance(nsample, (int, float))):
-            if ngood + nbad < nsample:
-                raise ValueError('ngood + nbad < nsample')
+        if isinstance(ngood, (int, float)) and ngood < 0:
+            raise ValueError('ngood < 0')
+        if isinstance(nbad, (int, float)) and nbad < 0:
+            raise ValueError('nbad < 0')
+        if isinstance(nsample, (int, float)) and nsample < 1:
+            raise ValueError('nsample < 1')
         ngood, nbad, nsample = \
             cupy.asarray(ngood), cupy.asarray(nbad), cupy.asarray(nsample)
         if size is None:
