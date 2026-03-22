@@ -63,6 +63,7 @@ class TestQuantile:
 
     # See gh-4453
     @testing.for_float_dtypes()
+    @pytest.mark.thread_unsafe(reason="allocator setting not thread-safe")
     def test_percentile_memory_access(self, dtype):
         # Create an allocator that guarantees array allocated in
         # cupy.percentile call will be followed by a NaN
