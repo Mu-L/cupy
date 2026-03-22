@@ -248,24 +248,27 @@ class RandomState:
     def hypergeometric(self, ngood, nbad, nsample, size=None, dtype='l'):
         """Returns an array of samples drawn from the hypergeometric distribution.
 
-        .. warning::
-
-            This function may synchronize the device.
-
         .. seealso::
             - :func:`cupy.random.hypergeometric` for full documentation
             - :meth:`numpy.random.RandomState.hypergeometric`
         """  # NOQA
+        # Array inputs are not validated here; the kernel dispatcher
+        # handles out-of-range values safely.
+        if isinstance(ngood, (int, float)):
+            if ngood < 0:
+                raise ValueError('ngood < 0')
+        if isinstance(nbad, (int, float)):
+            if nbad < 0:
+                raise ValueError('nbad < 0')
+        if isinstance(nsample, (int, float)):
+            if nsample < 1:
+                raise ValueError('nsample < 1')
+        if (isinstance(ngood, (int, float)) and isinstance(nbad, (int, float))
+                and isinstance(nsample, (int, float))):
+            if ngood + nbad < nsample:
+                raise ValueError('ngood + nbad < nsample')
         ngood, nbad, nsample = \
             cupy.asarray(ngood), cupy.asarray(nbad), cupy.asarray(nsample)
-        if cupy.any(ngood < 0):  # synchronize!
-            raise ValueError('ngood < 0')
-        if cupy.any(nbad < 0):  # synchronize!
-            raise ValueError('nbad < 0')
-        if cupy.any(nsample < 1):  # synchronize!
-            raise ValueError('nsample < 1')
-        if cupy.any(ngood + nbad < nsample):  # synchronize!
-            raise ValueError('ngood + nbad < nsample')
         if size is None:
             size = cupy.broadcast(ngood, nbad, nsample).shape
         y = cupy.empty(shape=size, dtype=dtype)
