@@ -602,14 +602,14 @@ class Generator:
 
         # Array inputs are not validated here; the kernel dispatcher
         # handles out-of-range values safely.
+        if type(ngood) in (float, int) and ngood < 0:
+            raise ValueError('ngood < 0')
+        if type(nbad) in (float, int) and nbad < 0:
+            raise ValueError('nbad < 0')
+        if type(nsample) in (float, int) and nsample < 0:
+            raise ValueError('nsample < 0')
         if (type(ngood) in (float, int) and type(nbad) in (float, int)
                 and type(nsample) in (float, int)):
-            if ngood < 0:
-                raise ValueError('ngood < 0')
-            if nbad < 0:
-                raise ValueError('nbad < 0')
-            if nsample < 0:
-                raise ValueError('nsample < 0')
             if ngood + nbad < nsample:
                 raise ValueError('ngood + nbad < nsample')
 
