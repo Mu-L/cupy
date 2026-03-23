@@ -360,7 +360,7 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
             return x, -10
 
         if iters > 0:
-            if cupy.abs(omega) < omegatol: omega tol breakdown
+            if cupy.abs(omega) < omegatol: # omega tol breakdown
                 return x, -11
 
             beta = (rho / rho_prev) * (alpha / omega)
