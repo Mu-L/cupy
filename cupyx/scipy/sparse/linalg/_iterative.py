@@ -401,7 +401,8 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
             callback(x)
 
     info = 0
-    # If the loop maxed out and it didn't converge, return iter count as error code
+    # If the loop maxed out and it didn't converge, 
+    # return iter count as error code
     if iters >= maxiter and not (r_norm <= atol):
         info = iters
 
