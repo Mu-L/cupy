@@ -492,18 +492,22 @@ def _get_interp_kernel(is_complex):
         }
         else if (x_idx >= len - 1) { y = right[0]; }
         else {
-            const Z slope = (value_t)(fy[x_idx+1] - fy[x_idx]) / \
-                            ((real_t)fx[x_idx+1] - (real_t)fx[x_idx]);
-            Z out = slope * ((real_t)x[i] - (real_t)fx[x_idx]) \
-                    + (value_t)fy[x_idx];
-            if (_isnan<Z>(out)) {
-                out = slope * ((real_t)x[i] - (real_t)fx[x_idx+1]) \
-                      + (value_t)fy[x_idx+1];
-                if (_isnan<Z>(out) && (fy[x_idx] == fy[x_idx+1])) {
-                    out = fy[x_idx];
+            if (x[i] == fx[x_idx]) {
+                y = fy[x_idx];
+            } else {
+                const Z slope = (value_t)(fy[x_idx+1] - fy[x_idx]) / \
+                                ((real_t)fx[x_idx+1] - (real_t)fx[x_idx]);
+                Z out = slope * ((real_t)x[i] - (real_t)fx[x_idx]) \
+                        + (value_t)fy[x_idx];
+                if (_isnan<Z>(out)) {
+                    out = slope * ((real_t)x[i] - (real_t)fx[x_idx+1]) \
+                          + (value_t)fy[x_idx+1];
+                    if (_isnan<Z>(out) && (fy[x_idx] == fy[x_idx+1])) {
+                        out = fy[x_idx];
+                    }
                 }
+                y = out;
             }
-            y = out;
         }
     '''
     return cupy.ElementwiseKernel(
