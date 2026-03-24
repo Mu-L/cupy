@@ -466,6 +466,7 @@ class TestCg:
         with pytest.raises(TypeError):
             sp.linalg.cg(ng_a, b, atol=self.atol)
 
+
 @testing.parameterize(*testing.product({
     'x0': [None, 'ones'],
     'M': [None, 'jacobi'],
