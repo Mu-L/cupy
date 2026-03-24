@@ -323,11 +323,11 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
     n = A.shape[0]
     if n == 0:
         return cupy.empty_like(b), 0
-    
+
     b_norm = cupy.linalg.norm(b)
     if b_norm == 0:
         return b, 0
-        
+
     atol = max(float(atol), rtol * float(b_norm))
     if maxiter is None:
         maxiter = 10 * n
@@ -348,19 +348,19 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
     iters = 0
     while True:
         r_norm = cupy.linalg.norm(r)
-        if r_norm <= atol: # reached abs tol
+        if r_norm <= atol:  # reached abs tol
             break
-        if iters >= maxiter: # reached max iters
+        if iters >= maxiter:  # reached max iters
             break
 
         rho = dotprod(rtilde, r)
-        
+
         # Breakdown checks ensure CuPy doesn't generate NaNs
-        if cupy.abs(rho) < rhotol: # rho tol breakdown
+        if cupy.abs(rho) < rhotol:  # rho tol breakdown
             return x, -10
 
         if iters > 0:
-            if cupy.abs(omega) < omegatol: # omega tol breakdown
+            if cupy.abs(omega) < omegatol:  # omega tol breakdown
                 return x, -11
 
             beta = (rho / rho_prev) * (alpha / omega)
@@ -373,7 +373,7 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
         phat = psolve(p)
         v = matvec(phat)
         rv = dotprod(rtilde, v)
-        
+
         if rv == 0:
             return x, -11
 
@@ -381,7 +381,7 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
         r -= alpha * v
         s[:] = r[:]
 
-        # does a half-step check 
+        # does a half-step check
         if cupy.linalg.norm(s) <= atol:
             x += alpha * phat
             break
@@ -393,15 +393,15 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
         x += alpha * phat
         x += omega * shat
         r -= omega * t
-        
+
         rho_prev = rho
         iters += 1
-        
+
         if callback is not None:
             callback(x)
 
     info = 0
-    # If the loop maxed out and it didn't converge, 
+    # If the loop maxed out and it didn't converge,
     # return iter count as error code
     if iters >= maxiter and not (r_norm <= atol):
         info = iters
