@@ -215,6 +215,7 @@ def generate():
     buf += [
         'Masked Arrays',
         '~~~~~~~~~~~~~',
+        '',
         'CuPy does not implement the NumPy masked array API. ',
         'An alternative is `MArray <https://github.com/mdhaber/marray>`__, '
         'which adds mask support to Python Array API Standard-compatible '
