@@ -220,7 +220,7 @@ def generate():
         'An alternative is `MArray <https://github.com/mdhaber/marray>`__, '
         'which adds mask support to Python Array API Standard-compatible '
         'array backends, including CuPy.'
-        ''
+        '',
     ]
     buf += _section(
         'Linear Algebra',
