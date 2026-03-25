@@ -216,10 +216,10 @@ def generate():
         'Masked Arrays',
         '~~~~~~~~~~~~~',
         '',
-        'CuPy does not implement the NumPy masked array API. ',
+        'CuPy does not implement the NumPy masked array API. '
         'An alternative is `MArray <https://github.com/mdhaber/marray>`__, '
         'which adds mask support to Python Array API Standard-compatible '
-        'array backends, including CuPy.'
+        'array backends, including CuPy.',
         '',
     ]
     buf += _section(
