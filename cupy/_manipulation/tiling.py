@@ -61,9 +61,7 @@ def repeat(a, repeats, axis=None):
     Args:
         a (cupy.ndarray): Array to transform.
         repeats (int, list, tuple, or cupy.ndarray):
-            The number of repeats.  When a CuPy ndarray is given, one
-            device-to-host transfer is performed to validate values
-            and determine the output size.
+            The number of repeats.
         axis (int): The axis to repeat.
 
     Returns:

@@ -1,6 +1,8 @@
 # distutils: language = c++
 import functools
+import operator
 
+import cupy
 import numpy
 
 from cupy._core._kernel import ElementwiseKernel
@@ -15,6 +17,7 @@ from libcpp cimport vector
 from cupy._core._dtype cimport get_dtype, _raise_if_invalid_cast
 from cupy._core cimport core
 from cupy._core.core cimport _ndarray_base
+from cupy._core.core cimport _convert_from_cupy_like
 from cupy._core cimport internal
 from cupy._core._kernel cimport _check_peer_access, _preprocess_args
 
@@ -505,23 +508,7 @@ cpdef _ndarray_base broadcast_to(_ndarray_base array, shape):
 
 cdef _ndarray_base _broadcast_repeat(
         _ndarray_base a, Py_ssize_t rep_val, int axis):
-    """Repeat every slice along ``axis`` exactly ``rep_val`` times.
-
-    Contract:
-      - ``axis`` is normalised (0 <= axis < a.ndim).
-      - ``rep_val >= 0`` (caller must validate; this function does not check).
-
-    Algorithm: insert a size-1 axis immediately after ``axis``, copy-broadcast
-    to ``rep_val`` wide via a single ``elementwise_copy`` call (NumPy-style
-    broadcasting), then reshape to merge the two dims.
-
-      (m, n, p), axis=1  ->  reshape (m, n, 1, p)
-                          ->  broadcast-copy  ->  (m, n, rep_val, p)
-                          ->  reshape  ->  (m, n*rep_val, p)
-
-    Memory: allocates the output array only.  No index array.
-    Writes are contiguous within each row.  Single GPU kernel launch.
-    """
+    """Broadcast-repeat via reshape + elementwise_copy + reshape."""
     cdef Py_ssize_t axis_size = a._shape[axis]
     ret_shape = list(a.shape)
     ret_shape[axis] = axis_size * rep_val
@@ -536,84 +523,43 @@ cdef _ndarray_base _broadcast_repeat(
     return ret_expanded.reshape(ret_shape)
 
 
-cpdef _ndarray_base _repeat_ndarray_repeats(
-        _ndarray_base a, _ndarray_base reps, object axis):
-    """GPU-native repeat when ``repeats`` is a CuPy ndarray.
+cdef _ndarray_base _repeat_perelement(
+        _ndarray_base a, _ndarray_base reps, int axis):
+    """Per-element repeat: ``cumsum + searchsorted + take``.
 
-    Two execution paths:
-
-    * Scalar broadcast (``reps.size == 1``): one D2H transfer to retrieve
-      the repeat count; delegates to ``_broadcast_repeat``.
-
-    * Per-element repeats (general case): one D2H transfer of the
-      ``reps`` array to validate non-negative values and determine output
-      size on the CPU; then ``cumsum + searchsorted + take`` entirely on
-      the device.
-
-    Both paths perform O(total) work on the GPU.  ``searchsorted`` is the
-    best available approach for the general case: benchmarks show it is 2x
-    faster than scatter-add + cumsum because CUDA atomic operations have
-    high per-operation overhead relative to parallel binary search.
+    ``reps`` must be 1-D intp.  ``axis`` must be normalised.
     """
-    import cupy as _cupy
+    cdef Py_ssize_t n = reps.size
+    cdef Py_ssize_t total
 
-    if not numpy.issubdtype(reps.dtype, numpy.integer):
-        raise ValueError(
-            "'repeats' array must have integer dtype, got {}".format(
-                reps.dtype))
-
-    reps = reps.ravel()
-
-    if axis is None:
-        a = a.ravel()
-        axis = 0
-    else:
-        axis = internal._normalize_axis_index(axis, a.ndim)
-
-    cdef Py_ssize_t axis_size = a._shape[axis]
-    cdef Py_ssize_t n_reps = reps.size
-    cdef Py_ssize_t total = 0
-
-    if n_reps == 1:
-        # Broadcast: one D2H transfer to retrieve the scalar.
-        rep_val = int(reps.get()[0])
-        if rep_val < 0:
-            raise ValueError(
-                "'repeats' should not be negative: {}".format(rep_val))
-        return _broadcast_repeat(a, rep_val, axis)
-
-    # Per-element path.
-    if n_reps != axis_size:
+    if n != a._shape[axis]:
         raise ValueError(
             "'repeats' and 'axis' of 'a' should be same length:"
-            " {} != {}".format(axis_size, n_reps))
-    if reps.dtype != numpy.intp:
-        reps = reps.astype(numpy.intp)
-    if n_reps > 0:
-        # One bulk D2H transfer for validation + output size.
-        # This is faster than two separate GPU reductions (min + sum)
-        # followed by scalar D2H syncs, because each sync incurs a
-        # full device synchronization round-trip (~2-5 ms on typical
-        # systems).  CPU min + sum on the host copy is negligible for
-        # typical reps sizes (< 1 M elements).
-        reps_cpu = reps.get()
-        if reps_cpu.min() < 0:
-            raise ValueError(
-                "all elements of 'repeats' should not be negative")
-        total = int(reps_cpu.sum())
+            " {} != {}".format(a._shape[axis], n))
+
+    if n == 0:
+        ret_shape = list(a.shape)
+        ret_shape[axis] = 0
+        return core.ndarray(ret_shape, dtype=a.dtype)
+
+    # Launch min and cumsum back-to-back so both GPU kernels are
+    # queued before we sync.  The first int() waits for both;
+    # the second is just a memcpy (~0.02 ms).
+    reps_min = reps.min()
+    boundaries = cupy.cumsum(reps)
+    total = int(boundaries[-1])
+    if int(reps_min) < 0:
+        raise ValueError(
+            "all elements of 'repeats' should not be negative")
 
     ret_shape = list(a.shape)
     ret_shape[axis] = total
     if total == 0:
         return core.ndarray(ret_shape, dtype=a.dtype)
 
-    # boundaries[i] = sum(reps[0..i]).
-    # searchsorted(boundaries, k, 'right') returns the index i such that
-    # boundaries[i-1] <= k < boundaries[i], i.e., k falls in segment i.
-    boundaries = _cupy.cumsum(reps)
-    positions = _cupy.arange(total, dtype=numpy.intp)
-    src_idx = _cupy.searchsorted(boundaries, positions, side='right')
-    return _cupy.take(a, src_idx, axis=axis)
+    src_idx = cupy.searchsorted(
+        boundaries, cupy.arange(total, dtype=numpy.intp), side='right')
+    return cupy.take(a, src_idx, axis=axis)
 
 
 cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
@@ -622,9 +568,7 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
     Args:
         a (cupy.ndarray): Array to transform.
         repeats (int, list, tuple, or cupy.ndarray):
-            The number of repeats.  When a CuPy ndarray is passed, one
-            device-to-host transfer is performed to validate values
-            and determine the output size.
+            The number of repeats.
         axis (int): The axis to repeat.
 
     Returns:
@@ -633,59 +577,62 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
     .. seealso:: :func:`numpy.repeat`
 
     """
-    cdef Py_ssize_t rep_val
+    cdef Py_ssize_t rep_val = 0
     cdef int norm_axis
+    cdef _ndarray_base reps_arr
 
-    # numpy.ndarray instances are rejected before PySequence_Check, which
-    # returns True for numpy arrays (they implement __len__/__getitem__).
-    if isinstance(repeats, numpy.ndarray):
+    # --- Step 1: convert repeats to scalar (rep_val) or 1-D intp
+    #     CuPy array (reps_arr).  reps_arr = None means scalar. ---
+
+    reps_arr = _convert_from_cupy_like(repeats, error=False)
+    if reps_arr is not None:
+        # CuPy ndarray or __cuda_array_interface__
+        if not numpy.can_cast(reps_arr.dtype, numpy.intp, casting='safe'):
+            raise TypeError(
+                "Cannot cast array data from dtype('{}') to "
+                "dtype('{}') according to the rule 'safe'"
+                .format(reps_arr.dtype, numpy.dtype(numpy.intp)))
+        if reps_arr.ndim > 1:
+            raise ValueError(
+                "object too deep for desired array")
+        if reps_arr.dtype != numpy.intp:
+            reps_arr = reps_arr.astype(numpy.intp)
+    elif isinstance(repeats, numpy.ndarray):
         raise TypeError(
             "'repeats' does not accept numpy.ndarray; "
             "convert with cupy.array() first")
-
-    if isinstance(repeats, _ndarray_base):
-        if not numpy.issubdtype(repeats.dtype, numpy.integer):
-            raise ValueError(
-                "'repeats' array must have integer dtype, got "
-                "{}".format(repeats.dtype))
-        reps_flat = repeats.ravel()
-        if reps_flat.size != 1:
-            # Multi-element CuPy array: GPU per-element path.
-            return _repeat_ndarray_repeats(a, repeats, axis)
-        # Size-1 or 0-D CuPy array: one D2H transfer to extract the
-        # repeat count, then fall through to the broadcast path below.
-        rep_scalar = int(reps_flat.get()[0])
-        if rep_scalar < 0:
-            raise ValueError(
-                "'repeats' should not be negative: {}".format(rep_scalar))
-        rep_val = rep_scalar
-    elif isinstance(repeats, int) or (
-            hasattr(repeats, 'dtype') and
-            numpy.ndim(repeats) == 0 and
-            numpy.issubdtype(repeats.dtype, numpy.integer)):
-        # Python int or 0-D numpy integer scalar (no D2H sync needed).
-        if repeats < 0:
-            raise ValueError(
-                "'repeats' should not be negative: {}".format(repeats))
-        rep_val = repeats
-    elif cpython.PySequence_Check(repeats):
-        if len(repeats) == 1:
-            if repeats[0] < 0:
-                raise ValueError(
-                    "'repeats' should not be negative: {}".format(repeats[0]))
-            rep_val = repeats[0]
-        else:
-            # Non-broadcast sequence (including empty): GPU per-element path.
-            return _repeat_ndarray_repeats(
-                a, core.array(repeats, dtype=numpy.intp), axis)
     else:
-        raise ValueError(
-            "'repeats' should be int or sequence: {}".format(repeats))
+        try:
+            rep_val = operator.index(repeats)
+            reps_arr = None
+        except TypeError:
+            if not cpython.PySequence_Check(repeats):
+                raise ValueError(
+                    "'repeats' should be int or sequence: {}"
+                    .format(repeats))
+            # Convert sequence to cupy array and re-enter the
+            # cupy-like path (handles len-1, empty, multi-element).
+            return _repeat(
+                a, core.array(repeats, dtype=numpy.intp), axis)
 
-    # Unified broadcast path: all scalar-like repeats reach here.
+    # --- Step 2: normalise axis ---
+
     if axis is None:
-        return _broadcast_repeat(a.ravel(), rep_val, 0)
+        a = a.ravel()
+        norm_axis = 0
     norm_axis = internal._normalize_axis_index(axis, a.ndim)
+
+    # --- Step 3: dispatch ---
+
+    if reps_arr is not None:
+        if reps_arr.size == 1:
+            rep_val = int(reps_arr.ravel().get()[0])
+        else:
+            return _repeat_perelement(a, reps_arr, norm_axis)
+
+    if rep_val < 0:
+        raise ValueError(
+            "'repeats' should not be negative: {}".format(rep_val))
     return _broadcast_repeat(a, rep_val, norm_axis)
 
 
