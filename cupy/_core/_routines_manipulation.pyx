@@ -567,8 +567,8 @@ cpdef _ndarray_base _repeat_ndarray_repeats(
     if axis is None:
         a = a.ravel()
         axis = 0
-
-    axis = internal._normalize_axis_index(axis, a.ndim)
+    else:
+        axis = internal._normalize_axis_index(axis, a.ndim)
 
     cdef Py_ssize_t axis_size = a._shape[axis]
     cdef Py_ssize_t n_reps = reps.size
