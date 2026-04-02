@@ -580,9 +580,8 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
     cdef int norm_axis
     cdef _ndarray_base reps_arr
 
-    # --- Step 1: convert repeats to scalar (rep_val) or 1-D intp
-    #     CuPy array (reps_arr).  reps_arr = None means scalar. ---
-
+    # Step 1: convert repeats to scalar (rep_val) or 1-D intp
+    #         CuPy array (reps_arr).  reps_arr = None means scalar.
     reps_arr = _convert_from_cupy_like(repeats, error=False)
     if reps_arr is not None:
         if not numpy.can_cast(reps_arr.dtype, numpy.intp, casting='safe'):
@@ -614,16 +613,14 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
         else:
             reps_arr = None
 
-    # --- Step 2: normalise axis ---
-
+    # Step 2: normalise axis
     if axis is None:
         a = a.ravel()
         norm_axis = 0
     else:
         norm_axis = internal._normalize_axis_index(axis, a.ndim)
 
-    # --- Step 3: dispatch ---
-
+    # Step 3: dispatch
     if reps_arr is not None:
         if reps_arr.size == 1:
             rep_val = reps_arr.item()  # synchronize!
