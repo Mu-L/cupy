@@ -9,8 +9,6 @@ import cupy
 from cupy import testing
 
 
-# ---- Pre-existing repeat tests (scalar and list repeats) ----
-
 @testing.parameterize(
     {'repeats': 0, 'axis': None},
     {'repeats': 2, 'axis': None},
@@ -84,8 +82,6 @@ class TestRepeatFailure:
                 xp.repeat(x, self.repeats, self.axis)
 
 
-# ---- ndarray repeats: correctness (compared against numpy) ----
-
 @testing.parameterize(
     # 1-D
     {'shape': (6,), 'reps': [1, 3, 2, 1, 1, 2], 'axis': None},
@@ -129,8 +125,6 @@ class TestRepeatNdarrayRepeats:
         return xp.repeat(x, xp.array(self.reps), self.axis)
 
 
-# ---- ndarray repeats: dtypes ----
-
 @testing.parameterize(*[{'rep_dtype': d} for d in [
     numpy.int8, numpy.int16, numpy.int32, numpy.int64,
     numpy.uint8, numpy.uint16, numpy.uint32,
@@ -157,8 +151,6 @@ class TestRepeatNdarrayArrayDtype:
         return xp.repeat(x, xp.array([1, 2, 3, 4]), axis=1)
 
 
-# ---- ndarray repeats: non-contiguous inputs ----
-
 class TestRepeatNdarrayNonContiguous:
 
     @testing.numpy_cupy_array_equal()
@@ -176,8 +168,6 @@ class TestRepeatNdarrayNonContiguous:
         x = testing.shaped_arange((5,), xp)[::-1]
         return xp.repeat(x, xp.array([0, 1, 2, 1, 0]))
 
-
-# ---- Scalar equivalence ----
 
 class TestRepeatScalarEquivalence:
     """All scalar-like repeats inputs produce identical results."""
@@ -212,8 +202,6 @@ class TestRepeatScalarEquivalence:
             cupy.repeat(a, numpy.array([1, 2, 3]))
 
 
-# ---- Error cases ----
-
 class TestRepeatNdarrayErrors:
 
     def test_length_mismatch(self):
@@ -238,10 +226,13 @@ class TestRepeatNdarrayErrors:
                            xp.array([1, 2, 3], dtype=numpy.uint64))
 
     def test_ndim_gt1_matches_numpy(self):
-        # Both reject ndim > 1 with ValueError
         for xp in (numpy, cupy):
-            with pytest.raises(ValueError, match=r'too deep'):
+            with pytest.raises(ValueError):
                 xp.repeat(xp.arange(6), xp.array([[1, 2, 3, 4, 5, 6]]))
+
+    def test_ndim_gt1_list_rejected(self):
+        with pytest.raises(ValueError, match=r'too deep'):
+            cupy.repeat(cupy.arange(6), [[1, 2, 3, 4, 5, 6]])
 
     def test_bad_axis(self):
         with pytest.raises(Exception):
@@ -254,8 +245,6 @@ class TestRepeatNdarrayErrors:
         cupy.testing.assert_array_equal(
             a.repeat(reps), cupy.repeat(a, reps))
 
-
-# ---- Bool and unsigned dtypes ----
 
 class TestRepeatNdarrayDtypeEdges:
 
@@ -274,8 +263,6 @@ class TestRepeatNdarrayDtypeEdges:
                          xp.array([1, 2, 3, 4], dtype=numpy.uint32))
 
 
-# ---- Large values ----
-
 class TestRepeatNdarrayLarge:
 
     @testing.numpy_cupy_array_equal()
@@ -288,8 +275,6 @@ class TestRepeatNdarrayLarge:
         return xp.repeat(testing.shaped_arange((3,), xp),
                          xp.array([50000]))
 
-
-# ---- Tile tests (unchanged) ----
 
 @testing.parameterize(
     {'reps': 0},

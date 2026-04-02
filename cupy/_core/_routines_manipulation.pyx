@@ -543,12 +543,11 @@ cdef _ndarray_base _repeat_perelement(
         return core.ndarray(ret_shape, dtype=a.dtype)
 
     # Launch min and cumsum back-to-back so both GPU kernels are
-    # queued before we sync.  The first int() waits for both;
-    # the second is just a memcpy (~0.02 ms).
+    # queued before we sync.
     reps_min = reps.min()
     boundaries = cupy.cumsum(reps)
     total = int(boundaries[-1])  # synchronize!
-    if int(reps_min) < 0:
+    if int(reps_min) < 0:  # synchronize! (D2H memcpy only; already synced)
         raise ValueError(
             "all elements of 'repeats' should not be negative")
 
@@ -586,7 +585,6 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
 
     reps_arr = _convert_from_cupy_like(repeats, error=False)
     if reps_arr is not None:
-        # CuPy ndarray or __cuda_array_interface__
         if not numpy.can_cast(reps_arr.dtype, numpy.intp, casting='safe'):
             raise TypeError(
                 "Cannot cast array data from dtype('{}') to "
@@ -604,29 +602,31 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
     else:
         try:
             rep_val = operator.index(repeats)
-            reps_arr = None
         except TypeError:
             if not cpython.PySequence_Check(repeats):
                 raise ValueError(
                     "'repeats' should be int or sequence: {}"
                     .format(repeats))
-            # Convert sequence to cupy array and re-enter the
-            # cupy-like path (handles len-1, empty, multi-element).
-            return _repeat(
-                a, core.array(repeats, dtype=numpy.intp), axis)
+            reps_arr = core.array(repeats, dtype=numpy.intp)
+            if reps_arr.ndim > 1:
+                raise ValueError(
+                    "object too deep for desired array")
+        else:
+            reps_arr = None
 
     # --- Step 2: normalise axis ---
 
     if axis is None:
         a = a.ravel()
         norm_axis = 0
-    norm_axis = internal._normalize_axis_index(axis, a.ndim)
+    else:
+        norm_axis = internal._normalize_axis_index(axis, a.ndim)
 
     # --- Step 3: dispatch ---
 
     if reps_arr is not None:
         if reps_arr.size == 1:
-            rep_val = reps_arr.item()
+            rep_val = reps_arr.item()  # synchronize!
         else:
             return _repeat_perelement(a, reps_arr, norm_axis)
 
