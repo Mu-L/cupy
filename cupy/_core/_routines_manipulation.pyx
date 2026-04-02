@@ -547,7 +547,7 @@ cdef _ndarray_base _repeat_perelement(
     # the second is just a memcpy (~0.02 ms).
     reps_min = reps.min()
     boundaries = cupy.cumsum(reps)
-    total = int(boundaries[-1])
+    total = int(boundaries[-1])  # synchronize!
     if int(reps_min) < 0:
         raise ValueError(
             "all elements of 'repeats' should not be negative")
@@ -626,7 +626,7 @@ cpdef _ndarray_base _repeat(_ndarray_base a, repeats, axis=None):
 
     if reps_arr is not None:
         if reps_arr.size == 1:
-            rep_val = int(reps_arr.ravel().get()[0])
+            rep_val = reps_arr.item()
         else:
             return _repeat_perelement(a, reps_arr, norm_axis)
 
