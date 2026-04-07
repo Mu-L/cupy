@@ -223,7 +223,7 @@ class TestRepeatNdarrayErrors:
         for xp in (numpy, cupy):
             with pytest.raises(TypeError):
                 xp.repeat(xp.arange(3),
-                           xp.array([1, 2, 3], dtype=numpy.uint64))
+                          xp.array([1, 2, 3], dtype=numpy.uint64))
 
     def test_ndim_gt1_matches_numpy(self):
         for xp in (numpy, cupy):
