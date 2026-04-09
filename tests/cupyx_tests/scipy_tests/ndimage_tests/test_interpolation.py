@@ -215,7 +215,9 @@ class TestMapCoordinatesHalfInteger:
         'matrix_shape': [(3, 3)],
         'offset': [[-1.3, 1.3]],
         'output_shape': [None],
-        'output': [None, numpy.float64, 'empty'],
+        # Avoid float64 output so rtol dict keyed by result dtype picks up
+        # the single-precision tolerance when the input dtype is float32.
+        'output': [None, numpy.float32, 'empty'],
         'order': [0, 1, 2, 3, 4, 5],
         'mode': legacy_modes,
         'cval': [1.0],
@@ -264,14 +266,9 @@ class TestAffineTransform:
                                     self.output, self.order, self.mode,
                                     self.cval, self.prefilter, **extra_kwargs)
 
-    # Note on tolerances: the rtol dict is keyed by the *output* array dtype.
-    # When a float32 input produces float64 output (via the output parameter),
-    # coordinates are still computed in float32 precision, but the rtol lookup
-    # returns the tight float64 default (1e-7). The higher atol (2e-4 vs 1e-4)
-    # accommodates this promoted-output case.
     @testing.for_float_dtypes(no_float16=True)
     @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
-                                 atol=2e-4, scipy_name='scp')
+                                 atol=1e-4, scipy_name='scp')
     def test_affine_transform_float(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         matrix = _random_affine_matrix(self.matrix_shape, xp, dtype)
@@ -279,19 +276,19 @@ class TestAffineTransform:
 
     @testing.for_complex_dtypes()
     @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.complex64: 1e-4},
-                                 atol=2e-4, scipy_name='scp')
+                                 atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_affine_transform_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float64:
+        if self.output == numpy.float32:
             # must promote output to a complex dtype
-            self.output = numpy.complex128
+            self.output = numpy.complex64
         a = testing.shaped_random((100, 100), xp, dtype)
         matrix = _random_affine_matrix(self.matrix_shape, xp, xp.float64)
         return self._affine_transform(xp, scp, a, matrix)
 
     @testing.for_float_dtypes(no_float16=True)
     @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
-                                 atol=2e-4, scipy_name='scp')
+                                 atol=1e-4, scipy_name='scp')
     def test_affine_transform_fortran_order(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         a = xp.asfortranarray(a)
@@ -308,7 +305,8 @@ class TestAffineTransform:
             pytest.xfail('ROCm/HIP may have a bug')
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(rtol=1e-4, atol=1e-4, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_affine_transform_int(self, xp, scp, dtype):
         self._hip_skip_invalid_condition()
 
@@ -524,7 +522,9 @@ class TestAffineTransformOpenCV:
         'angle': [-10, 1000],
         'axes': [(1, 0)],
         'reshape': [False, True],
-        'output': [None, numpy.float64, 'empty'],
+        # Avoid float64 output so rtol dict keyed by result dtype picks up
+        # the single-precision tolerance when the input dtype is float32.
+        'output': [None, numpy.float32, 'empty'],
         'order': [0, 1],
         'mode': legacy_modes,
         'cval': [1.0],
@@ -575,8 +575,8 @@ class TestRotate:
                                  atol=1e-5, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_rotate_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float64:
-            self.output = numpy.complex128
+        if self.output == numpy.float32:
+            self.output = numpy.complex64
         a = testing.shaped_random((10, 10), xp, dtype)
         return self._rotate(xp, scp, a)
 
@@ -601,7 +601,8 @@ class TestRotate:
                 pytest.xfail('ROCm/HIP may have a bug')
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(rtol=1e-5, atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-5, scipy_name='scp')
     def test_rotate_int(self, xp, scp, dtype):
         self._hip_skip_invalid_condition()
 
@@ -673,14 +674,16 @@ class TestRotateOpenCV:
 @testing.parameterize(*(
     testing.product({
         'shift': [0.1, -10, (5, -5)],
-        'output': [None, numpy.float64, 'empty'],
+        # Avoid float64 output so rtol dict keyed by result dtype picks up
+        # the single-precision tolerance when the input dtype is float32.
+        'output': [None, numpy.float32, 'empty'],
         'order': [0, 1, 3],
         'mode': legacy_modes + scipy16_modes,
         'cval': [1.0],
         'prefilter': [True],
     }) + testing.product({
         'shift': [0.1, ],
-        'output': [None, numpy.float64, 'empty'],
+        'output': [None, numpy.float32, 'empty'],
         'order': [0, 1, 3],
         'mode': ['constant', ],
         'cval': [cupy.nan, cupy.inf, -cupy.inf],
@@ -717,8 +720,8 @@ class TestShift:
                                  atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_shift_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float64:
-            self.output = numpy.complex128
+        if self.output == numpy.float32:
+            self.output = numpy.complex64
         a = testing.shaped_random((100, 100), xp, dtype)
         return self._shift(xp, scp, a)
 
@@ -739,7 +742,8 @@ class TestShift:
             pytest.xfail('ROCm/HIP may have a bug')
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(rtol=1e-4, atol=1e-4, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_shift_int(self, xp, scp, dtype):
         self._hip_skip_invalid_condition()
 
@@ -867,7 +871,9 @@ class TestShiftOpenCV:
 
 @testing.parameterize(*testing.product({
     'zoom': [0.1, 10, (0.1, 10)],
-    'output': [None, numpy.float64, 'empty'],
+    # Avoid float64 output so rtol dict keyed by result dtype picks up
+    # the single-precision tolerance when the input dtype is float32.
+    'output': [None, numpy.float32, 'empty'],
     'order': [0, 1],
     'mode': legacy_modes,
     'cval': [1.0],
@@ -904,8 +910,8 @@ class TestZoom:
                                  atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_zoom_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float64:
-            self.output = numpy.complex128
+        if self.output == numpy.float32:
+            self.output = numpy.complex64
         a = testing.shaped_random((100, 100), xp, dtype)
         return self._zoom(xp, scp, a)
 
@@ -918,7 +924,8 @@ class TestZoom:
         return self._zoom(xp, scp, a)
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(rtol=1e-4, atol=1e-4, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_zoom_int(self, xp, scp, dtype):
         if numpy.lib.NumpyVersion(scipy.__version__) < '1.0.0':
             if dtype in (numpy.dtype('l'), numpy.dtype('q')):
