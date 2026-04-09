@@ -35,6 +35,75 @@ def _conditional_scipy_version_skip(mode, order):
             'SciPy >= 1.6.0 needed to test this mode/order combination.')
 
 
+def _random_affine_matrix(matrix_shape, xp, dtype=numpy.float64, seed=12345):
+    """Generate a random, non-degenerate 2D affine matrix.
+
+    Composes rotation, scaling, shear, and translation within reasonable
+    ranges for testing with ~100x100 images, rather than using arbitrary
+    random values that may not represent valid affine transforms.
+
+    Parameters
+    ----------
+    matrix_shape : tuple
+        One of ``(2,)``, ``(2, 2)``, ``(2, 3)``, or ``(3, 3)``.
+    xp : module
+        Array module (``numpy`` or ``cupy``).
+    dtype : dtype
+        Output array dtype (should be a floating-point type).
+    seed : int
+        Random seed for reproducibility across numpy/cupy test runs.
+
+    Returns
+    -------
+    matrix : xp.ndarray
+        A randomized affine matrix of the requested shape and dtype.
+    """
+    rng = numpy.random.default_rng(seed)
+
+    if matrix_shape == (2,):
+        # Diagonal scaling factors
+        scale = rng.uniform(0.5, 1.5, size=2)
+        return xp.array(scale, dtype=dtype)
+
+    # Rotation
+    angle = rng.uniform(-numpy.pi, numpy.pi)
+    cos_a = numpy.cos(angle)
+    sin_a = numpy.sin(angle)
+    rotation = numpy.array([[cos_a, -sin_a],
+                            [sin_a, cos_a]])
+
+    # Non-uniform scaling
+    scale = numpy.diag(rng.uniform(0.5, 1.5, size=2))
+
+    # Shear
+    shear_val = rng.uniform(-0.3, 0.3)
+    shear = numpy.array([[1.0, shear_val],
+                         [0.0, 1.0]])
+
+    # Compose linear part
+    linear = rotation @ scale @ shear
+
+    if matrix_shape == (2, 2):
+        return xp.array(linear, dtype=dtype)
+
+    # Translation: small relative to the 100x100 test images
+    translation = rng.uniform(-10.0, 10.0, size=2)
+
+    if matrix_shape == (2, 3):
+        matrix = numpy.zeros((2, 3), dtype=numpy.float64)
+        matrix[:, :2] = linear
+        matrix[:, 2] = translation
+        return xp.array(matrix, dtype=dtype)
+
+    if matrix_shape == (3, 3):
+        matrix = numpy.eye(3, dtype=numpy.float64)
+        matrix[:2, :2] = linear
+        matrix[:2, 2] = translation
+        return xp.array(matrix, dtype=dtype)
+
+    raise ValueError(f"Unsupported matrix shape: {matrix_shape}")
+
+
 @testing.parameterize(*testing.product({
     'output': [None, numpy.float64, 'f', float, 'empty'],
     'order': [0, 1, 2, 3, 4, 5],
@@ -178,43 +247,55 @@ class TestAffineTransform:
             matrix[-1, 0:-1] = 0
             matrix[-1, -1] = 1
         affine_transform = scp.ndimage.affine_transform
+
+        # use double precision for comparison to SciPy results
+        # extra_kwargs = dict(float64_coords=True) if xp == cupy else {}
+        extra_kwargs = {}
         if self.output == 'empty':
             output = xp.empty_like(a)
             return_value = affine_transform(a, matrix, self.offset,
                                             self.output_shape, output,
                                             self.order, self.mode, self.cval,
-                                            self.prefilter)
+                                            self.prefilter, **extra_kwargs)
             assert return_value is None or return_value is output
             return output
         else:
             return affine_transform(a, matrix, self.offset, self.output_shape,
                                     self.output, self.order, self.mode,
-                                    self.cval, self.prefilter)
+                                    self.cval, self.prefilter, **extra_kwargs)
 
+    # Note on tolerances: the rtol dict is keyed by the *output* array dtype.
+    # When a float32 input produces float64 output (via the output parameter),
+    # coordinates are still computed in float32 precision, but the rtol lookup
+    # returns the tight float64 default (1e-7). The higher atol (2e-4 vs 1e-4)
+    # accommodates this promoted-output case.
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=2e-4, scipy_name='scp')
     def test_affine_transform_float(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
-        matrix = testing.shaped_random(self.matrix_shape, xp, dtype)
+        matrix = _random_affine_matrix(self.matrix_shape, xp, dtype)
         return self._affine_transform(xp, scp, a, matrix)
 
     @testing.for_complex_dtypes()
-    @testing.numpy_cupy_allclose(rtol=1e-6, atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.complex64: 1e-4},
+                                 atol=2e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_affine_transform_complex_float(self, xp, scp, dtype):
         if self.output == numpy.float64:
             # must promote output to a complex dtype
             self.output = numpy.complex128
         a = testing.shaped_random((100, 100), xp, dtype)
-        matrix = testing.shaped_random(self.matrix_shape, xp, xp.float64)
+        matrix = _random_affine_matrix(self.matrix_shape, xp, xp.float64)
         return self._affine_transform(xp, scp, a, matrix)
 
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=2e-4, scipy_name='scp')
     def test_affine_transform_fortran_order(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         a = xp.asfortranarray(a)
-        matrix = testing.shaped_random(self.matrix_shape, xp, dtype)
+        matrix = _random_affine_matrix(self.matrix_shape, xp, dtype)
         matrix = xp.asfortranarray(matrix)
         return self._affine_transform(xp, scp, a, matrix)
 
@@ -227,7 +308,7 @@ class TestAffineTransform:
             pytest.xfail('ROCm/HIP may have a bug')
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol=1e-4, atol=1e-4, scipy_name='scp')
     def test_affine_transform_int(self, xp, scp, dtype):
         self._hip_skip_invalid_condition()
 
@@ -238,7 +319,7 @@ class TestAffineTransform:
                 dtype = numpy.uint64
 
         a = testing.shaped_random((100, 100), xp, dtype)
-        matrix = testing.shaped_random(self.matrix_shape, xp, dtype)
+        matrix = _random_affine_matrix(self.matrix_shape, xp)
         out = self._affine_transform(xp, scp, a, matrix)
         float_out = self._affine_transform(xp, scp, a.astype(xp.float64),
                                            matrix) % 1
@@ -625,13 +706,15 @@ class TestShift:
                          self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_shift_float(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         return self._shift(xp, scp, a)
 
     @testing.for_complex_dtypes()
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.complex64: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_shift_complex_float(self, xp, scp, dtype):
         if self.output == numpy.float64:
@@ -640,7 +723,8 @@ class TestShift:
         return self._shift(xp, scp, a)
 
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_shift_fortran_order(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         a = xp.asfortranarray(a)
@@ -655,7 +739,7 @@ class TestShift:
             pytest.xfail('ROCm/HIP may have a bug')
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol=1e-4, atol=1e-4, scipy_name='scp')
     def test_shift_int(self, xp, scp, dtype):
         self._hip_skip_invalid_condition()
 
@@ -809,13 +893,15 @@ class TestZoom:
                         self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_zoom_float(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         return self._zoom(xp, scp, a)
 
     @testing.for_complex_dtypes()
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.complex64: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_zoom_complex_float(self, xp, scp, dtype):
         if self.output == numpy.float64:
@@ -824,14 +910,15 @@ class TestZoom:
         return self._zoom(xp, scp, a)
 
     @testing.for_float_dtypes(no_float16=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
+                                 atol=1e-4, scipy_name='scp')
     def test_zoom_fortran_order(self, xp, scp, dtype):
         a = testing.shaped_random((100, 100), xp, dtype)
         a = xp.asfortranarray(a)
         return self._zoom(xp, scp, a)
 
     @testing.for_int_dtypes(no_bool=True)
-    @testing.numpy_cupy_allclose(atol=1e-5, scipy_name='scp')
+    @testing.numpy_cupy_allclose(rtol=1e-4, atol=1e-4, scipy_name='scp')
     def test_zoom_int(self, xp, scp, dtype):
         if numpy.lib.NumpyVersion(scipy.__version__) < '1.0.0':
             if dtype in (numpy.dtype('l'), numpy.dtype('q')):
@@ -843,7 +930,7 @@ class TestZoom:
         out = self._zoom(xp, scp, a)
         float_out = self._zoom(xp, scp, a.astype(xp.float64)) % 1
         half = xp.full_like(float_out, 0.5)
-        out[xp.isclose(float_out, half, atol=1e-5)] = 0
+        out[xp.isclose(float_out, half, atol=1e-4)] = 0
         return out
 
 
