@@ -2608,7 +2608,7 @@ cdef fill_kernel = ElementwiseKernel('T x', 'T y', 'y = x', 'cupy_fill')
 
 cdef _byteswap_kernel_2 = ElementwiseKernel(
     'uint16 x', 'uint16 y',
-    'y = __byte_perm(x, 0, 0x0010)',
+    'y = __byte_perm(x, 0, 0x3201)',
     'cupy_byteswap_2')
 
 cdef _byteswap_kernel_4 = ElementwiseKernel(
