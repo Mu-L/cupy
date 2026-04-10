@@ -2141,3 +2141,18 @@ class TestCsrMatrixDiagonal:
                 scipy_a.setdiag(x, k=k)
             with pytest.raises(ValueError):
                 cupyx_a.setdiag(x, k=k)
+
+
+class TestSpMMLargeColumns:
+    """Regression test for cuSPARSE SpMM gridDim.y overflow (#9850)."""
+
+    @pytest.mark.parametrize('dtype', [numpy.float32, numpy.float64])
+    def test_dense_at_sparse_large_rows(self, dtype):
+        n_grid = 1048561  # just above 65535 * 16
+        n_ao = 5
+        dm = sparse.random(n_ao, n_ao, density=0.5,
+                           format='csr', dtype=dtype)
+        ao = cupy.ones((n_grid, n_ao), dtype=dtype)
+        result = ao @ dm
+        expected = ao @ dm.toarray()
+        cupy.testing.assert_allclose(result, expected, rtol=1e-5)
