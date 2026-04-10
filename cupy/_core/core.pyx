@@ -2608,12 +2608,12 @@ cdef fill_kernel = ElementwiseKernel('T x', 'T y', 'y = x', 'cupy_fill')
 
 cdef _byteswap_kernel_2 = ElementwiseKernel(
     'uint16 x', 'uint16 y',
-    'y = __byte_perm(x, 0, 0x3201)',
+    'y = __byte_perm(x, 0u, 0x3201u)',
     'cupy_byteswap_2')
 
 cdef _byteswap_kernel_4 = ElementwiseKernel(
     'uint32 x', 'uint32 y',
-    'y = __byte_perm(x, 0, 0x0123)',
+    'y = __byte_perm(x, 0u, 0x0123u)',
     'cupy_byteswap_4')
 
 cdef _byteswap_kernel_8 = ElementwiseKernel(
@@ -2621,8 +2621,8 @@ cdef _byteswap_kernel_8 = ElementwiseKernel(
     '''
     unsigned int lo = (unsigned int)(x);
     unsigned int hi = (unsigned int)(x >> 32);
-    y = ((unsigned long long)__byte_perm(lo, 0, 0x0123) << 32) |
-        (unsigned long long)__byte_perm(hi, 0, 0x0123);
+    y = ((unsigned long long)__byte_perm(lo, 0u, 0x0123u) << 32) |
+        (unsigned long long)__byte_perm(hi, 0u, 0x0123u);
     ''',
     'cupy_byteswap_8')
 
