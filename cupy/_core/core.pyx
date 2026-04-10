@@ -822,8 +822,8 @@ cdef class _ndarray_base:
             contig = _internal_ascontiguousarray(self).ravel()
             float_view = contig.view(component_dtype)
             swapped = _byteswap_dispatch(float_view)
-            result = _internal_ascontiguousarray(swapped).view(dtype).reshape(
-                self.shape)
+            result = _internal_ascontiguousarray(swapped)
+            result = result.view(dtype).reshape(self.shape)
             if inplace:
                 elementwise_copy(result, self)
                 return self
@@ -2630,8 +2630,8 @@ cdef _byteswap_dispatch(_ndarray_base a):
     cdef int itemsize = a.dtype.itemsize
     cdef _ndarray_base u, result
     dtype = a.dtype
-    u = _internal_ascontiguousarray(a).view(
-        numpy.dtype('uint{}'.format(itemsize * 8)))
+    uint_dtype = numpy.dtype('uint{}'.format(itemsize * 8))
+    u = _internal_ascontiguousarray(a).view(uint_dtype)
     if itemsize == 2:
         result = _byteswap_kernel_2(u)
     elif itemsize == 4:
@@ -2640,8 +2640,8 @@ cdef _byteswap_dispatch(_ndarray_base a):
         result = _byteswap_kernel_8(u)
     else:
         raise TypeError(
-            'byteswap not supported for dtype with itemsize {}'.format(
-                itemsize))
+            'byteswap not supported for dtype with '
+            'itemsize {}'.format(itemsize))
     return result.view(dtype)
 
 
