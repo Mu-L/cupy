@@ -819,7 +819,7 @@ cdef class _ndarray_base:
         # Complex types: byteswap real and imaginary components independently
         if numpy.issubdtype(dtype, numpy.complexfloating):
             component_dtype = numpy.finfo(dtype).dtype
-            contig = _internal_ascontiguousarray(self)
+            contig = _internal_ascontiguousarray(self).ravel()
             float_view = contig.view(component_dtype)
             swapped = _byteswap_dispatch(float_view)
             result = _internal_ascontiguousarray(swapped).view(dtype).reshape(
