@@ -2606,43 +2606,43 @@ cdef str _id = 'out0 = in0'
 
 cdef fill_kernel = ElementwiseKernel('T x', 'T y', 'y = x', 'cupy_fill')
 
-cdef _byteswap_kernel_2 = ElementwiseKernel(
-    'uint16 x', 'uint16 y',
-    'y = __byte_perm(x, 0u, 0x3201u)',
-    'cupy_byteswap_2')
+cdef str _byteswap_preamble = '#include <cuda/std/bit>'
 
-cdef _byteswap_kernel_4 = ElementwiseKernel(
-    'uint32 x', 'uint32 y',
-    'y = __byte_perm(x, 0u, 0x0123u)',
-    'cupy_byteswap_4')
+cdef _byteswap_kernel = ElementwiseKernel(
+    'T x', 'T y',
+    'y = cuda::std::byteswap(x)',
+    'cupy_byteswap',
+    preamble=_byteswap_preamble)
 
-cdef _byteswap_kernel_8 = ElementwiseKernel(
-    'uint64 x', 'uint64 y',
+# 16-byte (__uint128_t) path: ElementwiseKernel's type system has no uint128,
+# so take a raw uint64 view and reinterpret as __uint128_t inside the kernel.
+cdef _byteswap_kernel_16 = ElementwiseKernel(
+    'raw uint64 x', 'raw uint64 y',
     '''
-    unsigned int lo = (unsigned int)(x);
-    unsigned int hi = (unsigned int)(x >> 32);
-    y = ((unsigned long long)__byte_perm(lo, 0u, 0x0123u) << 32) |
-        (unsigned long long)__byte_perm(hi, 0u, 0x0123u);
+    reinterpret_cast<__uint128_t*>(&y[0])[i] = cuda::std::byteswap(
+        reinterpret_cast<const __uint128_t*>(&x[0])[i]);
     ''',
-    'cupy_byteswap_8')
+    'cupy_byteswap_16',
+    preamble=_byteswap_preamble)
+
 
 cdef _byteswap_dispatch(_ndarray_base a):
     cdef int itemsize = a.dtype.itemsize
-    cdef _ndarray_base u, result
+    cdef _ndarray_base u, result, out
     dtype = a.dtype
-    uint_dtype = numpy.dtype('uint{}'.format(itemsize * 8))
-    u = _internal_ascontiguousarray(a).view(uint_dtype)
-    if itemsize == 2:
-        result = _byteswap_kernel_2(u)
-    elif itemsize == 4:
-        result = _byteswap_kernel_4(u)
-    elif itemsize == 8:
-        result = _byteswap_kernel_8(u)
-    else:
-        raise TypeError(
-            'byteswap not supported for dtype with '
-            'itemsize {}'.format(itemsize))
-    return result.view(dtype)
+    if itemsize == 2 or itemsize == 4 or itemsize == 8:
+        uint_dtype = numpy.dtype('uint{}'.format(itemsize * 8))
+        u = _internal_ascontiguousarray(a).view(uint_dtype)
+        result = _byteswap_kernel(u)
+        return result.view(dtype)
+    if itemsize == 16:
+        u = _internal_ascontiguousarray(a).ravel().view(numpy.uint64)
+        out = _ndarray_init(ndarray, u._shape, u.dtype, None)
+        _byteswap_kernel_16(u, out, size=a.size)
+        return out.view(dtype).reshape(a.shape)
+    raise TypeError(
+        'byteswap not supported for dtype with '
+        'itemsize {}'.format(itemsize))
 
 
 cdef str _divmod_float = '''
