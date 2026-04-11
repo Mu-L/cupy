@@ -2,7 +2,6 @@ import numpy as _numpy
 
 import cupy as _cupy
 from cupy import _util
-from cupy.cuda import device as _device
 
 cimport cython
 from libcpp cimport vector
@@ -51,7 +50,7 @@ cdef dict _available_compute_capability = {
 @_util.memoize(for_each_device=True)
 def check_availability(name):
     if name in _available_compute_capability:
-        compute_capability = int(_device.get_compute_capability())
+        compute_capability = int(device.get_compute_capability())
         if compute_capability < _available_compute_capability[name]:
             return False
     return True
@@ -216,10 +215,7 @@ cdef class Plan:
 
 
 cpdef Handle _get_handle():
-    cdef int dev = device.get_device_id()
-    if dev not in _handles:
-        _handles[dev] = Handle()
-    return _handles[dev]
+    return device.get_cutensor_handle()
 
 
 cpdef int _get_cutensor_dtype(dtype) except -1:

@@ -74,6 +74,10 @@ cpdef intptr_t get_cusparse_handle() except? 0:
     return _get_device().cusparse_handle
 
 
+cpdef intptr_t get_cutensor_handle() except? 0:
+    return _get_device().cutensor_handle
+
+
 cpdef str get_compute_capability():
     dev_id = get_device_id()
     ret = _compute_capabilities.get(dev_id, None)
@@ -237,7 +241,10 @@ cdef class Device:
         try:
             runtime.setDevice(self.id)
             handle = create_func()
-            handles[self.id] = Handle(handle, destroy_func)
+            if destroy_func is not None:
+                handles[self.id] = Handle(handle, destroy_func)
+            else:
+                handles[self.id] = handle
             return handle
         finally:
             runtime.setDevice(prev_device)
@@ -289,6 +296,16 @@ cdef class Device:
         from cupy_backends.cuda.libs import cusparse
         return self._get_handle(
             'cusparse_sp_handles', cusparse.create, cusparse.destroy)
+
+    @property
+    def cutensor_handle(self):
+        """The cuTENSOR handle for this device.
+
+        The same handle is used for the same device even if the Device instance
+        itself is different.
+        """
+        from cupy_backends.cuda.libs import cutensor
+        return self._get_handle('cutensor_handles', cutensor.Handle(), None)
 
     @property
     def mem_info(self):
