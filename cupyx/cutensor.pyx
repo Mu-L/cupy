@@ -57,27 +57,6 @@ def check_availability(name):
 
 
 ###############################################################################
-# Handle: This class encapsulates the opaque structure `cutensorHandle_t`
-# holding cuTENSOR's library context.
-###############################################################################
-
-cdef class Handle:
-    cdef intptr_t _ptr
-
-    def __init__(self):
-        self._ptr = cutensor.create()
-
-    def __dealloc__(self):
-        if self._ptr is not 0:
-            cutensor.destroy(self._ptr)
-        self._ptr = <intptr_t>NULL
-
-    @property
-    def ptr(self):
-        return self._ptr
-
-
-###############################################################################
 # TensorDescriptor: This class encapsulates the opaque structure
 # `cutensorTensorDescriptor_t` representing a tensor descriptor.
 ###############################################################################
@@ -214,7 +193,7 @@ cdef class Plan:
         return self._ptr
 
 
-cpdef Handle _get_handle():
+cpdef intptr_t _get_handle():
     return device.get_cutensor_handle()
 
 
@@ -253,7 +232,7 @@ cpdef TensorDescriptor create_tensor_descriptor(_ndarray_base a):
     """
     handle = _get_handle()
     alignment_req = a.itemsize
-    key = (handle.ptr, a.dtype, tuple(a.shape),
+    key = (handle, a.dtype, tuple(a.shape),
            tuple(a.strides), alignment_req)
     if a.data.ptr & (alignment_req - 1) != 0:
         raise ValueError("Missaligned array")
@@ -263,7 +242,7 @@ cpdef TensorDescriptor create_tensor_descriptor(_ndarray_base a):
         stride = _numpy.array(a.strides, dtype=_numpy.int64) // a.itemsize
         cutensor_dtype = _get_cutensor_dtype(a.dtype)
         _tensor_descriptors[key] = TensorDescriptor(
-            handle.ptr, num_modes, extent.ctypes.data, stride.ctypes.data,
+            handle, num_modes, extent.ctypes.data, stride.ctypes.data,
             cutensor_dtype, alignment_req=alignment_req)
     return _tensor_descriptors[key]
 
@@ -282,9 +261,9 @@ cpdef PlanPreference create_plan_preference(
         (PlanPreference): A instance of class PlanPreference.
     """
     handle = _get_handle()
-    key = (handle.ptr, algo, jit_mode)
+    key = (handle, algo, jit_mode)
     if key not in _plan_preferences:
-        _plan_preferences[key] = PlanPreference(handle.ptr, algo, jit_mode)
+        _plan_preferences[key] = PlanPreference(handle, algo, jit_mode)
     return _plan_preferences[key]
 
 
@@ -301,9 +280,9 @@ cpdef Plan create_plan(
         (Plan): A instance of class Plan.
     """
     handle = _get_handle()
-    key = (handle.ptr, desc.ptr, pref.ptr, ws_limit)
+    key = (handle, desc.ptr, pref.ptr, ws_limit)
     if key not in _plans:
-        _plans[key] = Plan(handle.ptr, desc.ptr, pref.ptr, ws_limit)
+        _plans[key] = Plan(handle, desc.ptr, pref.ptr, ws_limit)
     return _plans[key]
 
 
@@ -445,14 +424,14 @@ cpdef OperationDescriptor create_elementwise_binary(
     if compute_desc == 0:
         compute_desc = compute_descs[ct_dtype_A][ct_dtype_C]
     handle = _get_handle()
-    key = (handle.ptr,
+    key = (handle,
            desc_A.ptr, mode_A.data, op_A,
            desc_C.ptr, mode_C.data, op_C,
            desc_D.ptr, mode_D.data, op_AC, compute_desc)
     if key not in _elementwise_binary_operators:
         _elementwise_binary_operators[key] = OperationDescriptor()
         _elementwise_binary_operators[key].create_elementwise_binary(
-            handle.ptr,
+            handle,
             desc_A.ptr, mode_A.data, op_A,
             desc_C.ptr, mode_C.data, op_C,
             desc_D.ptr, mode_D.data, op_AC, compute_desc)
@@ -510,7 +489,7 @@ def elementwise_binary(
     plan_pref = create_plan_preference()
     plan = create_plan(operator, plan_pref)
     cutensor.elementwiseBinaryExecute(
-        _get_handle().ptr, plan.ptr,
+        _get_handle(), plan.ptr,
         _create_scalar(alpha, out.dtype).ptr, A.data.ptr,
         _create_scalar(gamma, out.dtype).ptr, C.data.ptr,
         out.data.ptr)
@@ -577,7 +556,7 @@ cpdef OperationDescriptor create_elementwise_trinary(
     if compute_desc == 0:
         compute_desc = compute_descs[ct_dtype_A][ct_dtype_C]
     handle = _get_handle()
-    key = (handle.ptr,
+    key = (handle,
            desc_A.ptr, mode_A.data, op_A,
            desc_B.ptr, mode_B.data, op_B,
            desc_C.ptr, mode_C.data, op_C,
@@ -585,7 +564,7 @@ cpdef OperationDescriptor create_elementwise_trinary(
     if key not in _elementwise_trinary_operators:
         _elementwise_trinary_operators[key] = OperationDescriptor()
         _elementwise_trinary_operators[key].create_elementwise_trinary(
-            handle.ptr,
+            handle,
             desc_A.ptr, mode_A.data, op_A,
             desc_B.ptr, mode_B.data, op_B,
             desc_C.ptr, mode_C.data, op_C,
@@ -654,7 +633,7 @@ def elementwise_trinary(
     plan_pref = create_plan_preference()
     plan = create_plan(operator, plan_pref)
     cutensor.elementwiseTrinaryExecute(
-        _get_handle().ptr, plan.ptr,
+        _get_handle(), plan.ptr,
         _create_scalar(alpha, out.dtype).ptr, A.data.ptr,
         _create_scalar(beta, out.dtype).ptr, B.data.ptr,
         _create_scalar(gamma, out.dtype).ptr, C.data.ptr,
@@ -722,7 +701,7 @@ cpdef OperationDescriptor create_contraction(
     if compute_desc == 0:
         compute_desc = compute_descs[ct_dtype_A][ct_dtype_B][ct_dtype_C]
     handle = _get_handle()
-    key = (handle.ptr,
+    key = (handle,
            desc_A.ptr, mode_A.data, op_A,
            desc_B.ptr, mode_B.data, op_B,
            desc_C.ptr, mode_C.data, op_C,
@@ -730,7 +709,7 @@ cpdef OperationDescriptor create_contraction(
     if key not in _contraction_operators:
         _contraction_operators[key] = OperationDescriptor()
         _contraction_operators[key].create_contraction(
-            handle.ptr,
+            handle,
             desc_A.ptr, mode_A.data, op_A,
             desc_B.ptr, mode_B.data, op_B,
             desc_C.ptr, mode_C.data, op_C,
@@ -796,11 +775,11 @@ def contraction(
     plan_pref = create_plan_preference(algo=algo, jit_mode=jit_mode)
     # Query the estimated workspace size
     estimated_ws_size = cutensor.estimateWorkspaceSize(
-        _get_handle().ptr, operator.ptr, plan_pref.ptr, ws_pref)
+        _get_handle(), operator.ptr, plan_pref.ptr, ws_pref)
     plan = create_plan(operator, plan_pref, ws_limit=estimated_ws_size)
     actual_ws_size = _numpy.empty(1, dtype=_numpy.uint64)
     cutensor.planGetAttribute(
-        _get_handle().ptr, plan.ptr, cutensor.PLAN_REQUIRED_WORKSPACE,
+        _get_handle(), plan.ptr, cutensor.PLAN_REQUIRED_WORKSPACE,
         actual_ws_size.ctypes.data, actual_ws_size.itemsize)
     ws_size = actual_ws_size.item()
     assert ws_size <= estimated_ws_size, "Workspace size is larger than the estimated workspace size"  # NOQA
@@ -809,7 +788,7 @@ def contraction(
     scalar_dtype = _get_scalar_dtype(C.dtype)
     out = C
     cutensor.contract(
-        _get_handle().ptr, plan.ptr,
+        _get_handle(), plan.ptr,
         _create_scalar(alpha, scalar_dtype).ptr, A.data.ptr, B.data.ptr,
         _create_scalar(beta, scalar_dtype).ptr, C.data.ptr, out.data.ptr,
         ws.data.ptr, ws_size)
@@ -857,14 +836,14 @@ cpdef OperationDescriptor create_reduction(
     if compute_desc == 0:
         compute_desc = compute_descs[ct_dtype_A][ct_dtype_C]
     handle = _get_handle()
-    key = (handle.ptr,
+    key = (handle,
            desc_A.ptr, mode_A.data, op_A,
            desc_C.ptr, mode_C.data, op_C,
            op_reduce, compute_desc)
     if key not in _reduction_operators:
         _reduction_operators[key] = OperationDescriptor()
         _reduction_operators[key].create_reduction(
-            handle.ptr,
+            handle,
             desc_A.ptr, mode_A.data, op_A,
             desc_C.ptr, mode_C.data, op_C,
             desc_C.ptr, mode_C.data,
@@ -911,13 +890,13 @@ def reduction(
         desc_A, mode_A, op_A, desc_C, mode_C, op_C, op_reduce, compute_desc)
     plan_pref = create_plan_preference()
     ws_size = cutensor.estimateWorkspaceSize(
-        _get_handle().ptr, operator.ptr, plan_pref.ptr,
+        _get_handle(), operator.ptr, plan_pref.ptr,
         cutensor.WORKSPACE_RECOMMENDED)
     plan = create_plan(operator, plan_pref, ws_limit=ws_size)
     ws = core._ndarray_init(
         _cupy.ndarray, shape_t(1, ws_size), dtype=_numpy.int8, obj=None)
     cutensor.reduce(
-        _get_handle().ptr, plan.ptr,
+        _get_handle(), plan.ptr,
         _create_scalar(alpha, out.dtype).ptr, A.data.ptr,
         _create_scalar(beta, out.dtype).ptr, C.data.ptr, out.data.ptr,
         ws.data.ptr, ws_size)
@@ -1440,13 +1419,13 @@ cpdef MgTensorDescriptor create_mg_tensor_descriptor(a, devices=None):
         (MgTensorDescriptor): A instance of class MgTensorDescriptor.
     """
     handle = _get_mg_handle(devices)
-    key = (handle.ptr, *a.key)
+    key = (handle, *a.key)
     if key not in _mg_tensor_descriptors:
         # It seems that cuda_type is the same as cutensor_type,
         # so just reuse the cutensor_type here
         cutensor_dtype = _get_cutensor_dtype(a.dtype)
         _mg_tensor_descriptors[key] = MgTensorDescriptor(
-            handle.ptr, a.ndim, a.extent,
+            handle, a.ndim, a.extent,
             a.element_stride, a.block_size,
             a.block_stride, a.device_count,
             a.num_devices, a.devices, cutensor_dtype)
@@ -1469,10 +1448,10 @@ cpdef MgCopyDescriptor create_mg_copy_descriptor(
         (MgCopyDescriptor): A instance of class MgCopyDescriptor.
     """
     handle = _get_mg_handle(devices)
-    key = (handle.ptr, descDst.ptr, modeDst.data, descSrc.ptr, modeSrc.data)
+    key = (handle, descDst.ptr, modeDst.data, descSrc.ptr, modeSrc.data)
     if key not in _mg_copy_descriptors:
         _mg_copy_descriptors[key] = MgCopyDescriptor(
-            handle.ptr, descDst.ptr, modeDst.data,
+            handle, descDst.ptr, modeDst.data,
             descSrc.ptr, modeSrc.data)
     return _mg_copy_descriptors[key]
 
@@ -1491,10 +1470,10 @@ cpdef MgCopyPlan create_mg_copy_plan(
         (MgCopyPlan): A instance of class MgCopyPlan.
     """
     handle = _get_mg_handle(devices)
-    key = (handle.ptr, desc.ptr, tuple(workspaceDeviceSize), workspaceHostSize)
+    key = (handle, desc.ptr, tuple(workspaceDeviceSize), workspaceHostSize)
     if key not in _mg_copy_plans:
         _mg_copy_plans[key] = MgCopyPlan(
-            handle.ptr, desc.ptr, workspaceDeviceSize.ctypes.data,
+            handle, desc.ptr, workspaceDeviceSize.ctypes.data,
             workspaceHostSize)
     return _mg_copy_plans[key]
 
@@ -1531,7 +1510,7 @@ def copyMg(dst, mode_Dst, src, mode_Src, deviceBuf=None, hostBuf=None,
     deviceBufSize = _numpy.empty(num_devices, dtype=_numpy.int64)
     if deviceBuf is None or hostBuf is None:
         hostBufSize = cutensor.getMgCopyWorkspace(
-            handle.ptr, desc.ptr, deviceBufSize.ctypes.data
+            handle, desc.ptr, deviceBufSize.ctypes.data
         )
     if hostBuf is None:
         mem = alloc_pinned_memory(hostBufSize)
@@ -1568,7 +1547,7 @@ def copyMg(dst, mode_Dst, src, mode_Src, deviceBuf=None, hostBuf=None,
     else:
         for i in range(num_devices):
             streamPtrs[i] = streams[i].ptr
-    cutensor._copyMg(handle.ptr, plan.ptr, dst.ptr, src.ptr,
+    cutensor._copyMg(handle, plan.ptr, dst.ptr, src.ptr,
                      deviceBufptr.ctypes.data, hostBufptr,
                      streamPtrs.ctypes.data)
 
@@ -1600,7 +1579,7 @@ def copyMgWorkspace(dst, mode_Dst, src, mode_Src, devices=None):
 
     deviceBufSize = _numpy.empty(num_devices, dtype=_numpy.int64)
     hostBufSize = cutensor.getMgCopyWorkspace(
-        handle.ptr, desc.ptr, deviceBufSize.ctypes.data
+        handle, desc.ptr, deviceBufSize.ctypes.data
     )
     return hostBufSize, deviceBufSize
 
@@ -1650,7 +1629,7 @@ cpdef MgContractionDescriptor create_mg_contraction_descriptor(
     if compute_desc == 0:
         compute_desc = compute_descs[ct_dtype_A][ct_dtype_B][ct_dtype_C]
     handle = _get_mg_handle(devices)
-    key = (handle.ptr,
+    key = (handle,
            descA.ptr, modeA.data,
            descB.ptr, modeB.data,
            descC.ptr, modeC.data,
@@ -1658,7 +1637,7 @@ cpdef MgContractionDescriptor create_mg_contraction_descriptor(
            compute_desc)
     if key not in _mg_contraction_descriptors:
         _mg_contraction_descriptors[key]=MgContractionDescriptor(
-            handle.ptr,
+            handle,
             descA.ptr, modeA.data,
             descB.ptr, modeB.data,
             descC.ptr, modeC.data,
@@ -1678,10 +1657,10 @@ cpdef MgContractionFind create_mg_contraction_find(
         (MgContractionFind): A instance of class MgContractionFind.
     """
     handle = _get_mg_handle(devices)
-    key = (handle.ptr, algo)
+    key = (handle, algo)
     if key not in _mg_contraction_finds:
         _mg_contraction_finds[key]=MgContractionFind(
-            handle.ptr, algo)
+            handle, algo)
     return _mg_contraction_finds[key]
 
 cpdef MgContractionPlan create_mg_contraction_plan(
@@ -1700,11 +1679,11 @@ cpdef MgContractionPlan create_mg_contraction_plan(
         (MgContractionPlan): A instance of class MgContractionPlan.
     """
     handle = _get_mg_handle(devices)
-    key = (handle.ptr, desc.ptr, find.ptr, tuple(workspaceDeviceSize),
+    key = (handle, desc.ptr, find.ptr, tuple(workspaceDeviceSize),
            workspaceHostSize)
     if key not in _mg_contraction_plans:
         _mg_contraction_plans[key]=MgContractionPlan(
-            handle.ptr, desc.ptr, find.ptr, workspaceDeviceSize.ctypes.data,
+            handle, desc.ptr, find.ptr, workspaceDeviceSize.ctypes.data,
             workspaceHostSize)
     return _mg_contraction_plans[key]
 
@@ -1778,7 +1757,7 @@ def contractionMg(alpha, A, modeA, B, modeB, beta, C, modeC,
     deviceBufSize = _numpy.zeros((num_devices,), dtype=_numpy.int64)
     if deviceBuf is None or hostBuf is None:
         hostBufSize = cutensor.getMgContractionWorkspace(
-            handle.ptr, desc.ptr, find.ptr, ws_pref,
+            handle, desc.ptr, find.ptr, ws_pref,
             deviceBufSize.ctypes.data)
     if hostBuf is None:
         mem = alloc_pinned_memory(hostBufSize)
@@ -1815,7 +1794,7 @@ def contractionMg(alpha, A, modeA, B, modeB, beta, C, modeC,
             streamPtrs[i] = streams[i].ptr
     scalar_dtype = _get_scalar_dtype(C.dtype)
     cutensor._contractMg(
-        handle.ptr, plan.ptr, _create_scalar(alpha, scalar_dtype).ptr, A.ptr,
+        handle, plan.ptr, _create_scalar(alpha, scalar_dtype).ptr, A.ptr,
         B.ptr, _create_scalar(beta, scalar_dtype).ptr, C.ptr, D.ptr,
         deviceBufptr.ctypes.data, hostBufptr, streamPtrs.ctypes.data)
 
@@ -1882,6 +1861,6 @@ def contractionMgWorkspace(
     num_devices = handle.num_devices
     deviceBufSize = _numpy.zeros((num_devices,), dtype=_numpy.int64)
     hostBufSize = cutensor.getMgContractionWorkspace(
-        handle.ptr, desc.ptr, find.ptr, ws_pref,
+        handle, desc.ptr, find.ptr, ws_pref,
         deviceBufSize.ctypes.data)
     return hostBufSize, deviceBufSize

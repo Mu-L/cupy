@@ -241,10 +241,7 @@ cdef class Device:
         try:
             runtime.setDevice(self.id)
             handle = create_func()
-            if destroy_func is not None:
-                handles[self.id] = Handle(handle, destroy_func)
-            else:
-                handles[self.id] = handle
+            handles[self.id] = Handle(handle, destroy_func)
             return handle
         finally:
             runtime.setDevice(prev_device)
@@ -305,7 +302,8 @@ cdef class Device:
         itself is different.
         """
         from cupy_backends.cuda.libs import cutensor
-        return self._get_handle('cutensor_handles', cutensor.Handle(), None)
+        return self._get_handle(
+            'cutensor_handles', cutensor.create, cutensor.destroy)
 
     @property
     def mem_info(self):
