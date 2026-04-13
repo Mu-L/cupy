@@ -2158,4 +2158,3 @@ class TestCsrMatrixDiagonal:
 
 class TestSpMMLargeColumns:
     """Regression test for cuSPARSE SpMM gridDim.y overflow (#9850)."""
-
