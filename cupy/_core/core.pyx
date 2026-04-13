@@ -811,6 +811,10 @@ cdef class _ndarray_base:
         dtype = self.dtype
         itemsize = dtype.itemsize
 
+        if dtype.names is not None:
+            raise TypeError(
+                'byteswap is not supported for structured dtypes')
+
         if itemsize == 1:
             if inplace:
                 return self
