@@ -350,16 +350,14 @@ def create_mode(*mode):
 
 
 cdef inline Mode _create_mode_with_cache(axis_or_ndim):
-    cdef Mode mode
-    if axis_or_ndim in _modes:
-        mode = _modes[axis_or_ndim]
+    cdef Mode mode = <Mode>_modes.get(axis_or_ndim)
+    if mode is not None:
+        return mode
+    if type(axis_or_ndim) is int:
+        mode = Mode(tuple(range(axis_or_ndim)))
     else:
-        if type(axis_or_ndim) is int:
-            mode = Mode(tuple(range(axis_or_ndim)))
-        else:
-            mode = Mode(axis_or_ndim)
-        _modes[axis_or_ndim] = mode
-    return mode
+        mode = Mode(axis_or_ndim)
+    return <Mode>_modes.setdefault(axis_or_ndim, mode)
 
 
 cdef inline Mode _auto_create_mode(_ndarray_base array, mode):
@@ -389,12 +387,11 @@ cdef class _Scalar:
 cdef inline _Scalar _create_scalar(scale, dtype):
     cdef _Scalar scalar
     key = (scale, dtype)
-    if key in _scalars:
-        scalar = _scalars[key]
-    else:
-        scalar = _Scalar(scale, dtype)
-        _scalars[key] = scalar
-    return scalar
+    scalar = <_Scalar>_scalars.get(key)
+    if scalar is not None:
+        return scalar
+    scalar = _Scalar(scale, dtype)
+    return <_Scalar>_scalars.setdefault(key, scalar)
 
 
 cdef dict _elementwise_binary_compute_descs = {

@@ -479,7 +479,7 @@ class TestCuTensorIncontiguous:
 }))
 @pytest.mark.skipif(not ct.available, reason='cuTensor is unavailable')
 class TestCuTensorMg:
-    _tol = {'e': 1e-3, 'f': 2e-6, 'd': 1e-12}
+    _tol = {'e': 4e-3, 'f': 2e-6, 'd': 1e-12}
 
     @pytest.fixture(autouse=True)
     def setUp(self):
@@ -493,6 +493,8 @@ class TestCuTensorMg:
         n = self.shape
         if self.dtype == 'e':
             a = cupyx.empty_pinned((n, n, n, n), dtype=self.dtype)
+            a[...] = testing.shaped_random(
+                (n, n, n, n), numpy, dtype="float32")
         else:
             a = testing.shaped_random(
                 (n, n, n, n), numpy, dtype=self.dtype)
