@@ -23,10 +23,7 @@ class TestByteswap:
     @testing.for_all_dtypes()
     @testing.numpy_cupy_array_equal()
     def test_byteswap(self, xp, dtype, shape, inplace, order):
-        a = xp.array(
-            testing.shaped_arange(shape, xp, dtype),
-            order=order,
-        )
+        a = testing.shaped_arange(shape, xp, dtype, order)
         b = a.byteswap(inplace=inplace)
         if inplace:
             assert b is a
