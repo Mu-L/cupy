@@ -305,10 +305,13 @@ cdef class PinnedMemoryPool:
         cdef list free = self._free.get(size)
         if free is None:
             free = self._free.setdefault(size, [])
+
+        # Remove from in-use (must happen first, as soon as we append to free
+        # can immediately be `_in_use` again).
+        self._in_use.remove(mem)
+
         # OK to append to list (atomic) while another threads may pop().
         free.append(mem)
-
-        self._in_use.remove(mem)
 
     cpdef free_all_blocks(self):
         """Release free all blocks."""
