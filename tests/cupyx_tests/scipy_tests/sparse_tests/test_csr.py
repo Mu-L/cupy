@@ -2154,7 +2154,3 @@ class TestCsrMatrixDiagonal:
                 scipy_a.setdiag(x, k=k)
             with pytest.raises(ValueError):
                 cupyx_a.setdiag(x, k=k)
-
-
-class TestSpMMLargeColumns:
-    """Regression test for cuSPARSE SpMM gridDim.y overflow (#9850)."""
