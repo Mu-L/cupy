@@ -1439,9 +1439,7 @@ def spmv(a, x, y=None, alpha=1, beta=0, transa=False):
 
 # cuSPARSE csrmm_alg1 gridDim.y overflow threshold (#9850).
 # The kernel sets gridDim.y = ceil(n / 16); hardware max is 65535.
-# Fixed in CUDA 13.2+; affects all CUDA 12.x. Applied unconditionally
-# since the chunking overhead is negligible and there is no reliable
-# way to detect the fix at runtime (cusparseGetVersion doesn't change).
+# Fixed in cuSPARSE 12.7.20+ (CUDA 13.2+).
 _SPMM_MAX_DENSE_COLS = 65535 * 16  # 1,048,560
 
 
@@ -1499,7 +1497,7 @@ def spmm(a, b, c=None, alpha=1, beta=0, transa=False, transb=False):
         c.fill(0)
         return c
 
-    if n > _SPMM_MAX_DENSE_COLS:
+    if n > _SPMM_MAX_DENSE_COLS and getVersion() < 12720:
         # Workaround for cuSPARSE csrmm_alg1 gridDim.y overflow (#9850)
         for col0 in range(0, n, _SPMM_MAX_DENSE_COLS):
             col1 = min(col0 + _SPMM_MAX_DENSE_COLS, n)
