@@ -101,7 +101,7 @@ def copyto(dst, src, casting='same_kind', where=None):
         return
 
     if _can_memcpy(dst, src):
-        if src.device != dst.device and runtime.is_hip:
+        if runtime.is_hip and src.device != dst.device:
             # From hip_runtime_api.h (hipMemcpyAsync): "For multi-gpu
             # or peer-to-peer configurations, it is recommended to
             # use a stream which is attached to the device where the
