@@ -383,7 +383,7 @@ class WarpShuffleOp(BuiltinFunc):
         _hip_7_plus = cupy._core._is_hip_7_plus
         if runtime.is_hip and not _hip_7_plus:
             warnings.warn(f'mask {mask} is ignored on HIP', RuntimeWarning)
-        if not (0x0 <= mask <= cupy._core._full_mask):
+        if not (0x0 <= mask <= cupy._core._full_mask()):
             raise ValueError('mask is out of range')
 
         # val_id refers to "delta" for shfl_{up, down}, "srcLane" for shfl, and

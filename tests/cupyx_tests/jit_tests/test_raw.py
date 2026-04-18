@@ -654,7 +654,7 @@ class TestRaw:
         N = 5
         # __shfl_down() on HIP does not seem to have the same behavior...
         block = cupy._core._get_warpsize()
-        full_mask = (1 << block) - 1
+        full_mask = cupy._core._full_mask()
 
         @jit.rawkernel()
         def f(a):

@@ -55,19 +55,24 @@ def _get_warpsize():
 _is_hip_7_plus = (runtime._is_hip_environment
                   and _driver.get_build_version() >= 7_00_00000)
 
-# Full-lane mask: value is warp-size-dependent on HIP, always 32-bit on CUDA.
-# On HIP the mask *type* must be 64-bit (ROCm 7+ enforces via static_assert),
-# so _full_mask_hex() appends 'ULL' to the C literal.
-if runtime._is_hip_environment:
-    _full_mask = (1 << _get_warpsize()) - 1
-else:
-    _full_mask = 0xffffffff
 
-
-cpdef str _full_mask_hex():
+# Full-lane mask: warp-size-dependent on HIP, always 32-bit on CUDA.
+# Computed lazily (per device) so that importing CuPy does not require a
+# functional ROCm/CUDA runtime.
+@_util.memoize(for_each_device=True)
+def _full_mask():
     if runtime._is_hip_environment:
-        return hex(_full_mask) + 'ULL'
-    return hex(_full_mask)
+        return (1 << _get_warpsize()) - 1
+    return 0xffffffff
+
+
+# On HIP the mask *type* must be 64-bit (ROCm 7+ enforces via static_assert),
+# so the C literal is suffixed with 'ULL'.
+cpdef str _full_mask_hex():
+    cdef str s = hex(_full_mask())
+    if runtime._is_hip_environment:
+        return s + 'ULL'
+    return s
 
 
 cdef str _get_simple_elementwise_kernel_code(
