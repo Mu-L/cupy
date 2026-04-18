@@ -6,7 +6,7 @@ import cupy
 from cupy.exceptions import AxisError
 from cupy._core._scalar import get_typename as _get_typename
 from cupy._core._ufuncs import elementwise_copy
-from cupy._core._kernel import _full_mask_hex
+from cupy._core._kernel cimport _full_mask_hex
 import cupy._core.core as core
 from cupy import _util
 from cupy.cuda import thrust

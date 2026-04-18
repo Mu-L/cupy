@@ -64,7 +64,7 @@ else:
     _full_mask = 0xffffffff
 
 
-def _full_mask_hex():
+cpdef str _full_mask_hex():
     if runtime._is_hip_environment:
         return hex(_full_mask) + 'ULL'
     return hex(_full_mask)

@@ -6,7 +6,8 @@ import numpy
 import cupy
 import cupy._core.core as core
 from cupy.exceptions import AxisError
-from cupy._core._kernel import ElementwiseKernel, _get_warpsize, _full_mask_hex
+from cupy._core._kernel import ElementwiseKernel, _get_warpsize
+from cupy._core._kernel cimport _full_mask_hex
 from cupy._core._ufuncs import elementwise_copy
 
 from libcpp cimport vector
