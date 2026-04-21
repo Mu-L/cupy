@@ -342,7 +342,7 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
     rtilde = r.copy()
 
     # Initialize vars to prevent linter warnings
-    rho_prev, omega, alpha, p, v = None, None, None, None, None
+    rho_prev, omega, alpha, p, v = 0.0, 0.0, 0.0, 0.0, 0.0
     s = cupy.empty_like(r)
 
     iters = 0
@@ -353,14 +353,15 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
         if iters >= maxiter:  # reached max iters
             break
 
-        rho = dotprod(rtilde, r)
+        # pull from device to host
+        rho = dotprod(rtilde, r).item()
 
-        # Breakdown checks ensure CuPy doesn't generate NaNs
-        if cupy.abs(rho) < rhotol:  # rho tol breakdown
+        # Breakdown checks ensure no NaNs
+        if abs(rho) < rhotol:  # rho tol breakdown on host
             return x, -10
 
         if iters > 0:
-            if cupy.abs(omega) < omegatol:  # omega tol breakdown
+            if abs(omega) < omegatol:  # omega tol breakdown
                 return x, -11
 
             beta = (rho / rho_prev) * (alpha / omega)
@@ -372,24 +373,25 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
 
         phat = psolve(p)
         v = matvec(phat)
-        rv = dotprod(rtilde, v)
+        rv = dotprod(rtilde, v).item()  # pull to host
 
         if rv == 0:
             return x, -11
 
         alpha = rho / rv
         r -= alpha * v
-        s[:] = r[:]
 
         # does a half-step check
         if cupy.linalg.norm(s) <= atol:
             x += alpha * phat
             break
 
-        shat = psolve(s)
+        shat = psolve(r)
         t = matvec(shat)
-        omega = dotprod(t, s) / dotprod(t, t)
 
+        omega = dotprod(t, r).item() / dotprod(t, t).item
+
+        # host scalar times device array
         x += alpha * phat
         x += omega * shat
         r -= omega * t
