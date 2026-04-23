@@ -343,7 +343,6 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
 
     # Initialize vars to prevent linter warnings
     rho_prev, omega, alpha, p, v = 0.0, 0.0, 0.0, 0.0, 0.0
-    s = cupy.empty_like(r)
 
     iters = 0
     while True:
@@ -382,14 +381,14 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
         r -= alpha * v
 
         # does a half-step check
-        if cupy.linalg.norm(s) <= atol:
+        if cupy.linalg.norm(r) <= atol:
             x += alpha * phat
             break
 
         shat = psolve(r)
         t = matvec(shat)
 
-        omega = dotprod(t, r).item() / dotprod(t, t).item
+        omega = dotprod(t, r).item() / dotprod(t, t).item()
 
         # host scalar times device array
         x += alpha * phat
