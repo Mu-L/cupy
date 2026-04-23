@@ -388,7 +388,7 @@ def bicgstab(A, b, x0=None, *, rtol=1e-5, atol=0.0, maxiter=None, M=None,
         shat = psolve(r)
         t = matvec(shat)
 
-        omega = dotprod(t, r).item() / dotprod(t, t).item()
+        omega = (dotprod(t, r) / dotprod(t, t)).item()
 
         # host scalar times device array
         x += alpha * phat
