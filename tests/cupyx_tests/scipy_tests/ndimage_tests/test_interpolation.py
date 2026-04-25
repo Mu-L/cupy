@@ -250,21 +250,18 @@ class TestAffineTransform:
             matrix[-1, -1] = 1
         affine_transform = scp.ndimage.affine_transform
 
-        # use double precision for comparison to SciPy results
-        # extra_kwargs = dict(float64_coords=True) if xp == cupy else {}
-        extra_kwargs = {}
         if self.output == 'empty':
             output = xp.empty_like(a)
             return_value = affine_transform(a, matrix, self.offset,
                                             self.output_shape, output,
                                             self.order, self.mode, self.cval,
-                                            self.prefilter, **extra_kwargs)
+                                            self.prefilter)
             assert return_value is None or return_value is output
             return output
         else:
             return affine_transform(a, matrix, self.offset, self.output_shape,
                                     self.output, self.order, self.mode,
-                                    self.cval, self.prefilter, **extra_kwargs)
+                                    self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
     @testing.numpy_cupy_allclose(rtol={"default": 1e-7, numpy.float32: 1e-4},
