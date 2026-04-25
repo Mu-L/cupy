@@ -104,6 +104,13 @@ def _random_affine_matrix(matrix_shape, xp, dtype=numpy.float64, seed=12345):
     raise ValueError(f"Unsupported matrix shape: {matrix_shape}")
 
 
+def _maybe_promote_complex_output(output, input_dtype):
+    is_complex = cupy.dtype(input_dtype).kind == 'c'
+    if not is_complex or output is None or output == 'empty':
+        return output
+    return cupy.promote_types(cupy.dtype(output), cupy.complex64)
+
+
 @testing.parameterize(*testing.product({
     'output': [None, numpy.float64, 'f', float, 'empty'],
     'order': [0, 1, 2, 3, 4, 5],
@@ -119,7 +126,8 @@ class TestMapCoordinates:
     def _map_coordinates(self, xp, scp, a, coordinates):
         _conditional_scipy_version_skip(self.mode, self.order)
         map_coordinates = scp.ndimage.map_coordinates
-        if self.output == 'empty':
+        output = _maybe_promote_complex_output(self.output, a.dtype)
+        if output == 'empty':
             output = xp.empty(coordinates.shape[1:], dtype=a.dtype)
             return_value = map_coordinates(a, coordinates, output, self.order,
                                            self.mode, self.cval,
@@ -127,7 +135,7 @@ class TestMapCoordinates:
             assert return_value is None or return_value is output
             return output
         else:
-            return map_coordinates(a, coordinates, self.output, self.order,
+            return map_coordinates(a, coordinates, output, self.order,
                                    self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
@@ -141,13 +149,6 @@ class TestMapCoordinates:
     @testing.numpy_cupy_allclose(atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_map_coordinates_complex_float(self, xp, scp, dtype):
-        # promote output to a complex dtype
-        if self.output == numpy.float64:
-            self.output = numpy.complex128
-        elif self.output == float:  # noqa: E721
-            self.output = complex
-        elif self.output == 'f':
-            self.output = 'F'
         a = testing.shaped_random((100, 100), xp, dtype)
         coordinates = testing.shaped_random((a.ndim, 100), xp, xp.float64)
         return self._map_coordinates(xp, scp, a, coordinates)
@@ -250,7 +251,8 @@ class TestAffineTransform:
             matrix[-1, -1] = 1
         affine_transform = scp.ndimage.affine_transform
 
-        if self.output == 'empty':
+        output = _maybe_promote_complex_output(self.output, a.dtype)
+        if output == 'empty':
             output = xp.empty_like(a)
             return_value = affine_transform(a, matrix, self.offset,
                                             self.output_shape, output,
@@ -260,7 +262,7 @@ class TestAffineTransform:
             return output
         else:
             return affine_transform(a, matrix, self.offset, self.output_shape,
-                                    self.output, self.order, self.mode,
+                                    output, self.order, self.mode,
                                     self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
@@ -276,9 +278,6 @@ class TestAffineTransform:
                                  atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_affine_transform_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float32:
-            # must promote output to a complex dtype
-            self.output = numpy.complex64
         a = testing.shaped_random((100, 100), xp, dtype)
         matrix = _random_affine_matrix(self.matrix_shape, xp, xp.float64)
         return self._affine_transform(xp, scp, a, matrix)
@@ -545,7 +544,8 @@ class TestRotate:
     def _rotate(self, xp, scp, a):
         _conditional_scipy_version_skip(self.mode, self.order)
         rotate = scp.ndimage.rotate
-        if self.output == 'empty':
+        output = _maybe_promote_complex_output(self.output, a.dtype)
+        if output == 'empty':
             output = rotate(a, self.angle, self.axes,
                             self.reshape, None, self.order,
                             self.mode, self.cval, self.prefilter)
@@ -556,7 +556,7 @@ class TestRotate:
             return output
         else:
             return rotate(a, self.angle, self.axes,
-                          self.reshape, self.output, self.order,
+                          self.reshape, output, self.order,
                           self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
@@ -572,8 +572,6 @@ class TestRotate:
                                  atol=1e-5, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_rotate_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float32:
-            self.output = numpy.complex64
         a = testing.shaped_random((10, 10), xp, dtype)
         return self._rotate(xp, scp, a)
 
@@ -695,14 +693,15 @@ class TestShift:
     def _shift(self, xp, scp, a):
         shift = scp.ndimage.shift
         _conditional_scipy_version_skip(self.mode, self.order)
-        if self.output == 'empty':
+        output = _maybe_promote_complex_output(self.output, a.dtype)
+        if output == 'empty':
             output = xp.empty_like(a)
             return_value = shift(a, self.shift, output, self.order,
                                  self.mode, self.cval, self.prefilter)
             assert return_value is None or return_value is output
             return output
         else:
-            return shift(a, self.shift, self.output, self.order,
+            return shift(a, self.shift, output, self.order,
                          self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
@@ -717,8 +716,6 @@ class TestShift:
                                  atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_shift_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float32:
-            self.output = numpy.complex64
         a = testing.shaped_random((100, 100), xp, dtype)
         return self._shift(xp, scp, a)
 
@@ -884,7 +881,8 @@ class TestZoom:
     def _zoom(self, xp, scp, a):
         _conditional_scipy_version_skip(self.mode, self.order)
         zoom = scp.ndimage.zoom
-        if self.output == 'empty':
+        output = _maybe_promote_complex_output(self.output, a.dtype)
+        if output == 'empty':
             output = zoom(a, self.zoom, None, self.order,
                           self.mode, self.cval, self.prefilter)
             return_value = zoom(a, self.zoom, output, self.order,
@@ -892,7 +890,7 @@ class TestZoom:
             assert return_value is None or return_value is output
             return output
         else:
-            return zoom(a, self.zoom, self.output, self.order,
+            return zoom(a, self.zoom, output, self.order,
                         self.mode, self.cval, self.prefilter)
 
     @testing.for_float_dtypes(no_float16=True)
@@ -907,8 +905,6 @@ class TestZoom:
                                  atol=1e-4, scipy_name='scp')
     @testing.with_requires('scipy>=1.6.0')
     def test_zoom_complex_float(self, xp, scp, dtype):
-        if self.output == numpy.float32:
-            self.output = numpy.complex64
         a = testing.shaped_random((100, 100), xp, dtype)
         return self._zoom(xp, scp, a)
 
