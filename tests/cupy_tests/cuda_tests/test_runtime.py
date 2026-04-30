@@ -52,17 +52,18 @@ class TestMemPool:
 @pytest.mark.skipif(runtime.is_hip,
                     reason='This assumption is correct only in CUDA')
 def test_assumed_runtime_version():
-    # When CUDA Python is enabled, CuPy calculates the CUDA runtime version
-    # from NVRTC version. This test ensures that the assumption is correct
-    # by running the same logic in non-CUDA Python environment.
-    # When this fails, `runtime.runtimeGetVersion()` logic needs to be fixed.
+    # Verify that the CUDA runtime version returned by
+    # cudaRuntimeGetVersion() is consistent with the NVRTC version
+    # (both are shipped as part of the CUDA Toolkit).
     (major, minor) = nvrtc.getVersion()
     local_ver = runtime._getLocalRuntimeVersion()
-    # On Windows, starting from CUDA 13.0, cudaRuntimeGetVersion() always
-    # returns major * 1000 regardless of the minor version (nvbugs 5955788,
-    # 5523579). Accept either form on Windows + CUDA >= 13.
+    # On Windows with CUDA >= 13.0, the runtime implementation is provided
+    # by the display driver (nvbugs 5955788, 5523579), so
+    # cudaRuntimeGetVersion() reflects the driver's runtime version
+    # rather than the toolkit version. Verify that the runtime, driver,
+    # and local runtime versions all agree.
     if sys.platform == 'win32' and major >= 13:
-        assert local_ver in (major * 1000, major * 1000 + minor * 10)
+        assert runtime.runtimeGetVersion() == runtime.driverGetVersion() == local_ver
     else:
         assert local_ver == major * 1000 + minor * 10
 
