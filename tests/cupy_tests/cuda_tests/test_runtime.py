@@ -57,13 +57,15 @@ def test_assumed_runtime_version():
     # (both are shipped as part of the CUDA Toolkit).
     (major, minor) = nvrtc.getVersion()
     local_ver = runtime._getLocalRuntimeVersion()
-    # On Windows with CUDA >= 13.0, the runtime implementation is provided
-    # by the display driver (nvbugs 5955788, 5523579), so
+    # On Windows with CUDA >= 13.0, the runtime implementation is
+    # provided by the display driver (nvbugs 5955788, 5523579), so
     # cudaRuntimeGetVersion() reflects the driver's runtime version
-    # rather than the toolkit version. Verify that the runtime, driver,
-    # and local runtime versions all agree.
+    # rather than the toolkit version. Verify that the runtime,
+    # driver, and local runtime versions all agree.
     if sys.platform == 'win32' and major >= 13:
-        assert runtime.runtimeGetVersion() == runtime.driverGetVersion() == local_ver
+        rt_ver = runtime.runtimeGetVersion()
+        drv_ver = runtime.driverGetVersion()
+        assert rt_ver == drv_ver == local_ver
     else:
         assert local_ver == major * 1000 + minor * 10
 
