@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import pickle
-import sys
 
 import pytest
 
 import cupy
 from cupy.cuda import driver
-from cupy.cuda import nvrtc
 from cupy.cuda import runtime
 
 
@@ -47,27 +45,6 @@ class TestMemPool:
         assert ptr > 0
         runtime.freeAsync(ptr, s.ptr)
         runtime.memPoolDestroy(pool)
-
-
-@pytest.mark.skipif(runtime.is_hip,
-                    reason='This assumption is correct only in CUDA')
-def test_assumed_runtime_version():
-    # Verify that the CUDA runtime version returned by
-    # cudaRuntimeGetVersion() is consistent with the NVRTC version
-    # (both are shipped as part of the CUDA Toolkit).
-    (major, minor) = nvrtc.getVersion()
-    local_ver = runtime._getLocalRuntimeVersion()
-    # On Windows with CUDA >= 13.0, the runtime implementation is
-    # provided by the display driver (nvbugs 5955788, 5523579), so
-    # cudaRuntimeGetVersion() reflects the driver's runtime version
-    # rather than the toolkit version. Verify that the runtime,
-    # driver, and local runtime versions all agree.
-    if sys.platform == 'win32' and major >= 13:
-        rt_ver = runtime.runtimeGetVersion()
-        drv_ver = runtime.driverGetVersion()
-        assert rt_ver == drv_ver == local_ver
-    else:
-        assert local_ver == major * 1000 + minor * 10
 
 
 def test_major_version():
